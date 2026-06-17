@@ -40,6 +40,7 @@ const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
 const MODEL = process.env.MODEL || 'claude-sonnet-4-6';
 const ALLOWED_ORIGIN = (process.env.ALLOWED_ORIGIN || '').trim();
 const IA_LIMITE_DIA = parseInt(process.env.IA_LIMITE_DIA || '40', 10);
+const LIMITE_EQUIPOS = parseInt(process.env.LIMITE_EQUIPOS || '2', 10); // equipos por licencia
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const DB_PATH = path.join(DATA_DIR, 'db.json');
 
@@ -89,15 +90,27 @@ function estadoLicencia(key) {
 }
 function extenderLicencia(key, email, planId) {
   const plan = PLANES[planId]; if (!plan) return null;
-  const l = DB.licencias[key] || { email, plan: planId, creado: Date.now(), pagos: [] };
+  const l = DB.licencias[key] || { email, plan: planId, creado: Date.now(), pagos: [], dispositivos: [] };
   const base = (l.vence && l.vence > Date.now()) ? l.vence : Date.now();
   l.email = email || l.email;
   l.plan = planId;
   l.vence = base + plan.dias * 24 * 60 * 60 * 1000;
   l.pagos = l.pagos || [];
+  l.dispositivos = l.dispositivos || [];
   DB.licencias[key] = l;
   guardarDB(DB);
   return l;
+}
+/* Autoriza un equipo para una licencia. Registra el equipo si hay cupo;
+   si se alcanzó el límite y el equipo es nuevo, rechaza. Sin device (apps
+   antiguas) no bloquea. Devuelve {ok, nuevo}. */
+function autorizarDispositivo(l, device, registrar) {
+  if (!l) return { ok: false };
+  if (!device) return { ok: true };
+  l.dispositivos = l.dispositivos || [];
+  if (l.dispositivos.includes(device)) return { ok: true };
+  if (registrar && l.dispositivos.length < LIMITE_EQUIPOS) { l.dispositivos.push(device); return { ok: true, nuevo: true }; }
+  return { ok: false, motivo: 'limite' };
 }
 
 /* ===================== Firma Flow ===================== */
@@ -134,11 +147,35 @@ app.get('/', (_req, res) => res.json({
 }));
 
 /* ===================== Licencias ===================== */
-// Consultar estado de una licencia
+// Consultar estado de una licencia (atando el equipo que consulta)
 app.get('/api/licencia/estado', (req, res) => {
   const key = String(req.query.licencia || '').trim();
-  if (!key) return res.json({ ok: true, ...estadoLicencia('') });
-  res.json({ ok: true, ...estadoLicencia(key) });
+  const device = String(req.query.device || '').trim();
+  const est = estadoLicencia(key);
+  const l = DB.licencias[key];
+  const equipos = l ? (l.dispositivos || []).length : 0;
+  if (!key || !est.activa || !l) {
+    return res.json({ ok: true, ...est, equipos, limiteEquipos: LIMITE_EQUIPOS });
+  }
+  const auth = autorizarDispositivo(l, device, true);
+  if (auth.nuevo) guardarDB(DB);
+  if (!auth.ok) {
+    // Licencia pagada, pero este equipo excede el límite permitido
+    return res.json({ ok: true, activa: false, plan: 'free', vence: est.vence, motivo: 'limite', equipos: (l.dispositivos || []).length, limiteEquipos: LIMITE_EQUIPOS });
+  }
+  res.json({ ok: true, ...est, equipos: (l.dispositivos || []).length, limiteEquipos: LIMITE_EQUIPOS });
+});
+
+// Desvincular los equipos de una licencia (requiere licencia + correo que coincida)
+app.post('/api/licencia/liberar', (req, res) => {
+  const key = String((req.body && req.body.licencia) || '').trim();
+  const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+  const l = DB.licencias[key];
+  if (!l) return res.status(404).json({ ok: false, error: 'Licencia no encontrada.' });
+  if (l.email && email && l.email.toLowerCase() !== email) return res.status(403).json({ ok: false, error: 'El correo no coincide con la licencia.' });
+  l.dispositivos = [];
+  guardarDB(DB);
+  res.json({ ok: true });
 });
 
 /* ===================== Pago (Flow) ===================== */
@@ -202,6 +239,35 @@ app.post('/api/pago/confirmar', async (req, res) => {
   } catch (e) { console.error(e); res.status(200).send('ok'); }
 });
 
+// Verificación de respaldo: si el webhook no llegó, la app puede pedir que
+// re-consultemos a Flow el estado de los pagos pendientes de una licencia.
+app.post('/api/pago/verificar', async (req, res) => {
+  try {
+    const key = String((req.body && req.body.licencia) || '').trim();
+    if (!key) return res.json({ ok: true, activada: false, ...estadoLicencia('') });
+    let activada = false;
+    const pendientes = Object.entries(DB.ordenes).filter(([, o]) => o.licencia === key && o.estado === 'pendiente');
+    for (const [commerceOrder, orden] of pendientes) {
+      try {
+        const r = await flowGet('/payment/getStatus', { token: orden.token });
+        const d = r.data || {};
+        if (d.status === 2) {
+          let planId = orden.plan;
+          try { const o = JSON.parse(d.optional || '{}'); if (o.plan) planId = o.plan; } catch (_) {}
+          extenderLicencia(key, orden.email, planId);
+          orden.estado = 'pagado';
+          (DB.licencias[key].pagos = DB.licencias[key].pagos || []).push({ commerceOrder, monto: d.amount, fecha: Date.now() });
+          guardarDB(DB);
+          activada = true;
+        } else if (d.status === 3 || d.status === 4) {
+          orden.estado = (d.status === 3 ? 'rechazado' : 'anulado'); guardarDB(DB);
+        }
+      } catch (_) { /* si una orden falla, seguimos con las demás */ }
+    }
+    res.json({ ok: true, activada, ...estadoLicencia(key) });
+  } catch (e) { console.error(e); res.status(500).json({ ok: false, error: 'Error interno.' }); }
+});
+
 // Página de retorno cuando el usuario vuelve desde Flow
 app.all('/api/pago/retorno', (_req, res) => {
   res.set('content-type', 'text/html; charset=utf-8').send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pago — Control Finanzas Studio</title><style>body{font-family:system-ui,sans-serif;background:#0b1220;color:#eaf0f8;display:grid;place-items:center;height:100vh;margin:0;text-align:center;padding:24px}.c{max-width:440px}.mk{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#0e7c5a,#34d399);margin:0 auto 18px}h1{font-size:1.4rem;margin:0 0 8px}p{color:#aebccd;line-height:1.5}</style></head><body><div class="c"><div class="mk"></div><h1>¡Gracias!</h1><p>Tu pago se está procesando. Vuelve a <b>Control Finanzas Studio</b> y presiona <b>“Revisar mi plan”</b> en Ajustes para activar tu cuenta Pro.</p><p>Puedes cerrar esta ventana.</p></div></body></html>`);
@@ -226,6 +292,11 @@ app.post('/api/asesor', async (req, res) => {
     if (!est.activa) return res.status(402).json({ ok: false, error: 'El Asesor IA es parte del plan Pro. Activa tu plan para usarlo.', plan: 'free' });
 
     const lic = DB.licencias[key];
+    const device = String((req.body && req.body.device) || '').trim();
+    const auth = autorizarDispositivo(lic, device, true);
+    if (auth.nuevo) guardarDB(DB);
+    if (!auth.ok) return res.status(402).json({ ok: false, error: 'Esta licencia ya está activa en el máximo de equipos permitidos.', plan: 'free', motivo: 'limite' });
+
     if (!dentroDeCuotaIA(lic)) { guardarDB(DB); return res.status(429).json({ ok: false, error: 'Alcanzaste el máximo de consultas IA por hoy. Intenta mañana.' }); }
 
     let { resumen = '', pregunta = '', modo = 'analisis' } = req.body || {};
