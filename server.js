@@ -44,7 +44,21 @@ const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
 const MODEL = process.env.MODEL || 'claude-sonnet-4-6';
 const ALLOWED_ORIGIN = (process.env.ALLOWED_ORIGIN || '').trim();
 const IA_LIMITE_DIA = parseInt(process.env.IA_LIMITE_DIA || '40', 10);
-const LIMITE_EQUIPOS = parseInt(process.env.LIMITE_EQUIPOS || '2', 10); // equipos por licencia
+/* Límites por plan — configurables por variable de entorno o por licencia individual */
+const LIMITE_PRO      = parseInt(process.env.LIMITE_PRO      || '3', 10);
+const LIMITE_NEGOCIO  = parseInt(process.env.LIMITE_NEGOCIO  || '6', 10);
+const LIMITE_EQUIPOS  = parseInt(process.env.LIMITE_EQUIPOS  || '3', 10); // fallback genérico
+
+function limiteParaPlan(planId) {
+  if (!planId) return LIMITE_PRO;
+  if (planId.startsWith('negocio')) return LIMITE_NEGOCIO;
+  return LIMITE_PRO;
+}
+function limiteParaLicencia(l) {
+  // Si tiene límite personalizado (puesto desde el admin), ese gana
+  if (l && typeof l.limiteEquipos === 'number') return l.limiteEquipos;
+  return limiteParaPlan(l && l.plan);
+}
 const TRIAL_DIAS = parseInt(process.env.TRIAL_DIAS || '10', 10); // prueba gratis (exportar/cartola), NO incluye IA
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const DB_PATH = path.join(DATA_DIR, 'db.json');
@@ -126,7 +140,8 @@ function autorizarDispositivo(l, device, registrar) {
   if (!device) return { ok: true };
   l.dispositivos = l.dispositivos || [];
   if (l.dispositivos.includes(device)) return { ok: true };
-  if (registrar && l.dispositivos.length < LIMITE_EQUIPOS) { l.dispositivos.push(device); return { ok: true, nuevo: true }; }
+  const limite = limiteParaLicencia(l);
+  if (registrar && l.dispositivos.length < limite) { l.dispositivos.push(device); return { ok: true, nuevo: true }; }
   return { ok: false, motivo: 'limite' };
 }
 
@@ -211,15 +226,15 @@ app.get('/api/licencia/estado', (req, res) => {
   const l = DB.licencias[key];
   const equipos = l ? (l.dispositivos || []).length : 0;
   if (!key || !est.activa || !l) {
-    return res.json({ ok: true, ...est, equipos, limiteEquipos: LIMITE_EQUIPOS });
+    return res.json({ ok: true, ...est, equipos, limiteEquipos: l ? limiteParaLicencia(l) : LIMITE_PRO });
   }
   const auth = autorizarDispositivo(l, device, true);
   if (auth.nuevo) guardarDB(DB);
   if (!auth.ok) {
     // Licencia pagada, pero este equipo excede el límite permitido
-    return res.json({ ok: true, activa: false, plan: 'free', vence: est.vence, motivo: 'limite', equipos: (l.dispositivos || []).length, limiteEquipos: LIMITE_EQUIPOS });
+    return res.json({ ok: true, activa: false, plan: 'free', vence: est.vence, motivo: 'limite', equipos: (l.dispositivos || []).length, limiteEquipos: limiteParaLicencia(l) });
   }
-  res.json({ ok: true, ...est, equipos: (l.dispositivos || []).length, limiteEquipos: LIMITE_EQUIPOS });
+  res.json({ ok: true, ...est, equipos: (l.dispositivos || []).length, limiteEquipos: limiteParaLicencia(l) });
 });
 
 // Desvincular los equipos de una licencia (requiere licencia + correo que coincida)
@@ -475,6 +490,7 @@ app.get('/api/admin/licencias', (req, res) => {
       licencia: key, email: l.email || '', plan: l.plan || 'free',
       activa: !!activa, vence: l.vence || null, diasRestantes,
       dispositivos: (l.dispositivos || []).length,
+      limiteEquipos: limiteParaLicencia(l),
       pagos: (l.pagos || []).length,
       creado: l.creado || null
     };
@@ -492,11 +508,13 @@ app.post('/api/admin/licencia/crear', (req, res) => {
   if (!planDef) return res.status(400).json({ ok: false, error: 'Plan inválido.' });
   const duracion = dias ? parseInt(dias, 10) : planDef.dias;
   const key = nuevaLicencia();
+  const limiteCustom = req.body.limiteEquipos ? parseInt(req.body.limiteEquipos, 10) : undefined;
   DB.licencias[key] = {
     email, plan, creado: Date.now(),
     vence: Date.now() + duracion * 24 * 60 * 60 * 1000,
     pagos: [{ manual: true, fecha: Date.now(), dias: duracion }],
-    dispositivos: []
+    dispositivos: [],
+    ...(limiteCustom && !isNaN(limiteCustom) ? { limiteEquipos: limiteCustom } : {})
   };
   guardarDB(DB);
   res.json({ ok: true, licencia: key, email, plan, dias: duracion, vence: DB.licencias[key].vence });
@@ -519,9 +537,13 @@ app.post('/api/admin/licencia/editar', (req, res) => {
     l.vence = base + d * 24 * 60 * 60 * 1000;
     (l.pagos = l.pagos || []).push({ manual: true, fecha: Date.now(), dias: d });
   }
+  if (typeof req.body.limiteEquipos !== 'undefined') {
+    const lim = parseInt(req.body.limiteEquipos, 10);
+    if (!isNaN(lim) && lim >= 1 && lim <= 20) l.limiteEquipos = lim;
+  }
   guardarDB(DB);
   const est = estadoLicencia(key);
-  res.json({ ok: true, licencia: key, ...est });
+  res.json({ ok: true, licencia: key, ...est, limiteEquipos: limiteParaLicencia(l) });
 });
 
 /* Desactivar licencia (pone vence en el pasado) */
