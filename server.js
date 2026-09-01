@@ -535,6 +535,19 @@ app.post('/api/admin/licencia/desactivar', (req, res) => {
   res.json({ ok: true, licencia: key, activa: false });
 });
 
+/* Eliminar licencia permanentemente (borra datos de sync también) */
+app.post('/api/admin/licencia/eliminar', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const { licencia: key } = req.body || {};
+  if (!DB.licencias[key]) return res.status(404).json({ ok: false, error: 'Licencia no encontrada.' });
+  delete DB.licencias[key];
+  for (const [id, o] of Object.entries(DB.ordenes || {})) {
+    if (o.licencia === key) delete DB.ordenes[id];
+  }
+  guardarDB(DB);
+  res.json({ ok: true, licencia: key, eliminada: true });
+});
+
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
   app.listen(PORT, () => console.log(`Finanzas backend en :${PORT} · ${MODEL} · Flow ${FLOW_API_URL}`));
