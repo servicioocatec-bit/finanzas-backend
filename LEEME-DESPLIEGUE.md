@@ -28,6 +28,8 @@ Crea un repositorio nuevo, por ejemplo **`finanzas-backend`** (NO lo mezcles con
 | `MODEL` | `claude-sonnet-4-6` (def.) o `claude-haiku-4-5-20251001` (más barato) | No |
 | `ALLOWED_ORIGIN` | dominio de tu app (vacío = cualquiera) | No |
 | `IA_LIMITE_DIA` | consultas IA por licencia/día (def. 40) | No |
+| `LIMITE_EQUIPOS` | equipos permitidos por licencia (def. 2) | No |
+| `TRIAL_DIAS` | días de prueba gratis por equipo al instalar (def. 10). Solo desbloquea **exportar Excel/PDF e importar cartola**; el Asesor IA nunca entra en la prueba, siempre exige Pro pagado | No |
 
 ## 4. Dominio
 Railway → **Settings** → **Generate Domain**. Copia esa URL en `PUBLIC_URL`
@@ -54,7 +56,13 @@ reactivar el plan en otro equipo (la pega en *Activar licencia*).
 
 ## Precios
 Edita el objeto `PLANES` en `server.js` (montos en CLP enteros). Por defecto:
-Pro mensual $4.990 · Pro anual $49.900.
+Pro mensual $4.990 · Pro anual $49.900 · Negocio mensual $12.990 · Negocio anual $124.900.
+
+El plan **Negocio** incluye todo lo de Pro (exportar, cartola, Asesor IA) más el
+módulo Negocio en la app: categorías de PyME, IVA débito/crédito fiscal,
+cotizaciones/facturas simples en PDF y cuentas por cobrar/pagar. No es
+facturación electrónica del SII (eso exige certificado digital e inscripción
+legal aparte); son documentos de cobro en PDF para uso interno.
 
 ## Pruebas
 1. Empieza con `FLOW_API_URL=https://sandbox.flow.cl/api` y credenciales de

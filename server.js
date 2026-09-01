@@ -18,6 +18,10 @@
      MODEL               (opcional)    claude-sonnet-4-6 (def.) | claude-haiku-4-5-20251001
      ALLOWED_ORIGIN      (opcional)    dominio de tu app (vacío = cualquiera)
      IA_LIMITE_DIA       (opcional)    consultas IA por licencia/día (def. 40)
+     TRIAL_DIAS          (opcional)    días de prueba gratuita por equipo, SOLO
+                                       para exportar/importar cartola — el
+                                       Asesor IA NUNCA se activa con la prueba,
+                                       siempre requiere Pro (def. 10)
      DATA_DIR            (opcional)    carpeta de datos (def. /data)
    ===================================================================== */
 
@@ -41,20 +45,31 @@ const MODEL = process.env.MODEL || 'claude-sonnet-4-6';
 const ALLOWED_ORIGIN = (process.env.ALLOWED_ORIGIN || '').trim();
 const IA_LIMITE_DIA = parseInt(process.env.IA_LIMITE_DIA || '40', 10);
 const LIMITE_EQUIPOS = parseInt(process.env.LIMITE_EQUIPOS || '2', 10); // equipos por licencia
+const TRIAL_DIAS = parseInt(process.env.TRIAL_DIAS || '10', 10); // prueba gratis (exportar/cartola), NO incluye IA
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const DB_PATH = path.join(DATA_DIR, 'db.json');
 
 /* ---------- Planes (precios en CLP, enteros) ---------- */
+/* "negocio_*" es el plan superior para PyMEs/freelancers: incluye todo lo de
+   "pro_*" (exportar, cartola, Asesor IA) más el módulo Negocio (IVA,
+   documentos de cobro/pago). estadoLicencia() devuelve el id real del plan
+   guardado en la licencia, así el cliente distingue personal vs negocio. */
 const PLANES = {
-  pro_mensual: { nombre: 'Pro mensual', dias: 30, monto: 4990 },
-  pro_anual:   { nombre: 'Pro anual',   dias: 365, monto: 49900 }
+  pro_mensual:     { nombre: 'Pro mensual',     dias: 30,  monto: 4990 },
+  pro_anual:       { nombre: 'Pro anual',       dias: 365, monto: 49900 },
+  negocio_mensual: { nombre: 'Negocio mensual', dias: 30,  monto: 12990 },
+  negocio_anual:   { nombre: 'Negocio anual',   dias: 365, monto: 124900 }
 };
 
 /* ---------- Base de datos en archivo (escritura atómica) ---------- */
 function asegurarDir() { try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {} }
 function leerDB() {
-  try { return JSON.parse(fs.readFileSync(DB_PATH, 'utf8')); }
-  catch (_) { return { licencias: {}, ordenes: {} }; }
+  try {
+    const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    db.trials = db.trials || {};
+    return db;
+  }
+  catch (_) { return { licencias: {}, ordenes: {}, trials: {} }; }
 }
 function guardarDB(db) {
   asegurarDir();
@@ -86,7 +101,9 @@ function estadoLicencia(key) {
   const l = DB.licencias[key];
   if (!l) return { activa: false, plan: 'free' };
   const activa = l.vence && Date.now() < l.vence;
-  return { activa, plan: activa ? 'pro' : 'free', vence: l.vence || null, email: l.email || '' };
+  // Se devuelve el plan REAL (pro_mensual, negocio_anual, etc.), no un genérico
+  // "pro", para que el cliente pueda distinguir el nivel Negocio del personal.
+  return { activa, plan: activa ? (l.plan || 'pro_mensual') : 'free', vence: l.vence || null, email: l.email || '' };
 }
 function extenderLicencia(key, email, planId) {
   const plan = PLANES[planId]; if (!plan) return null;
@@ -112,6 +129,34 @@ function autorizarDispositivo(l, device, registrar) {
   if (registrar && l.dispositivos.length < LIMITE_EQUIPOS) { l.dispositivos.push(device); return { ok: true, nuevo: true }; }
   return { ok: false, motivo: 'limite' };
 }
+
+/* ===================== Prueba gratis (trial) por dispositivo ===================== */
+/* Solo desbloquea exportar (Excel/PDF) e importar cartola durante TRIAL_DIAS.
+   El Asesor IA NUNCA se activa por esta vía: siempre exige licencia Pro paga
+   (ver /api/asesor, que solo mira estadoLicencia). Se registra por DEVICE_ID
+   una sola vez para que borrar los datos locales de la app no reinicie la
+   prueba en el mismo equipo. */
+function estadoTrial(device) {
+  if (!device) return { activo: false, vence: null, dias: null, nuevo: false };
+  DB.trials = DB.trials || {};
+  let t = DB.trials[device];
+  let nuevo = false;
+  if (!t) {
+    t = { inicio: Date.now(), vence: Date.now() + TRIAL_DIAS * 24 * 60 * 60 * 1000 };
+    DB.trials[device] = t;
+    nuevo = true;
+    guardarDB(DB);
+  }
+  const activo = Date.now() < t.vence;
+  const dias = Math.max(0, Math.ceil((t.vence - Date.now()) / 86400000));
+  return { activo, vence: t.vence, dias, nuevo };
+}
+
+app.get('/api/trial/estado', (req, res) => {
+  const device = String(req.query.device || '').trim();
+  if (!device) return res.json({ ok: true, activo: false, vence: null, dias: null });
+  res.json({ ok: true, ...estadoTrial(device) });
+});
 
 /* ===================== Firma Flow ===================== */
 function firmarFlow(params) {
@@ -143,7 +188,7 @@ async function flowGet(servicio, params) {
 app.get('/', (_req, res) => res.json({
   ok: true, servicio: 'finanzas-backend', modelo: MODEL,
   flow: FLOW_API_URL.includes('sandbox') ? 'sandbox' : 'produccion',
-  planes: Object.keys(PLANES)
+  planes: Object.keys(PLANES), trialDias: TRIAL_DIAS
 }));
 
 /* ===================== Licencias ===================== */
@@ -321,8 +366,82 @@ app.post('/api/asesor', async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ ok: false, error: 'Error interno.' }); }
 });
 
+/* ===================== Sincronización multi-dispositivo =====================
+   Permite que Mac, Windows y PWA compartan los mismos datos en tiempo real.
+
+   GET  /api/datos  → devuelve snapshot completo de la licencia
+   POST /api/datos  → recibe snapshot del cliente, fusiona y devuelve resultado
+
+   Merge por id: gana el registro con updatedAt más reciente.
+   config y presupuesto: el cliente siempre sobrescribe (objetos planos, sin historial).
+   Requiere licencia Pro activa — sin plan funciona solo en local.
+   =========================================================================== */
+
+function mergeArray(servidor, cliente) {
+  const mapa = new Map();
+  for (const r of (servidor || [])) mapa.set(r.id, r);
+  for (const r of (cliente || [])) {
+    const s = mapa.get(r.id);
+    if (!s || (r.updatedAt || r.id) >= (s.updatedAt || s.id)) mapa.set(r.id, r);
+  }
+  return Array.from(mapa.values());
+}
+
+app.get('/api/datos', (req, res) => {
+  const key    = String(req.query.licencia || '').trim();
+  const device = String(req.query.device   || '').trim();
+  const est    = estadoLicencia(key);
+  if (!est.activa) return res.status(402).json({ ok: false, error: 'La sincronización requiere plan Pro.' });
+  const lic  = DB.licencias[key];
+  const auth = autorizarDispositivo(lic, device, true);
+  if (auth.nuevo) guardarDB(DB);
+  if (!auth.ok)   return res.status(402).json({ ok: false, error: 'Límite de equipos alcanzado.', motivo: 'limite' });
+  const d = lic.datos || {};
+  res.json({ ok: true, syncTs: lic.syncTs || 0,
+    movimientos: d.movimientos || [], presupuesto: d.presupuesto || {},
+    metas: d.metas || [], recurrentes: d.recurrentes || [],
+    documentos: d.documentos || [], config: d.config || null });
+});
+
+app.post('/api/datos', (req, res) => {
+  try {
+    const key    = String((req.body && req.body.licencia) || '').trim();
+    const device = String((req.body && req.body.device)   || '').trim();
+    const est    = estadoLicencia(key);
+    if (!est.activa) return res.status(402).json({ ok: false, error: 'La sincronización requiere plan Pro.' });
+    const lic  = DB.licencias[key];
+    const auth = autorizarDispositivo(lic, device, true);
+    if (auth.nuevo) guardarDB(DB);
+    if (!auth.ok)   return res.status(402).json({ ok: false, error: 'Límite de equipos alcanzado.', motivo: 'limite' });
+    const cli = req.body || {};
+    const srv = lic.datos || {};
+    const merged = {
+      movimientos: mergeArray(srv.movimientos, cli.movimientos),
+      presupuesto:  cli.presupuesto  || srv.presupuesto  || {},
+      metas:        mergeArray(srv.metas,       cli.metas),
+      recurrentes:  mergeArray(srv.recurrentes, cli.recurrentes),
+      documentos:   mergeArray(srv.documentos,  cli.documentos),
+      config:       cli.config       || srv.config       || null
+    };
+    lic.datos  = merged;
+    lic.syncTs = Date.now();
+    guardarDB(DB);
+    res.json({ ok: true, syncTs: lic.syncTs,
+      movimientos: merged.movimientos, presupuesto: merged.presupuesto,
+      metas: merged.metas, recurrentes: merged.recurrentes,
+      documentos: merged.documentos, config: merged.config });
+  } catch (e) { console.error(e); res.status(500).json({ ok: false, error: 'Error interno al sincronizar.' }); }
+});
+
+/* ===================== Servir la PWA (static) =====================
+   La carpeta /public contiene la PWA. Railway la sirve en la misma
+   URL del backend, sin necesitar un host adicional.
+   ================================================================= */
+const PWA_DIR = path.join(__dirname, 'public');
+app.use(express.static(PWA_DIR));
+
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
   app.listen(PORT, () => console.log(`Finanzas backend en :${PORT} · ${MODEL} · Flow ${FLOW_API_URL}`));
 }
-module.exports = { app, firmarFlow, estadoLicencia, extenderLicencia, nuevaLicencia, PLANES };
+module.exports = { app, firmarFlow, estadoLicencia, extenderLicencia, nuevaLicencia, estadoTrial, PLANES };

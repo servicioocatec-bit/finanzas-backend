@@ -32,6 +32,8 @@ FLOW_SECRET_KEY=SECRETKEY-SANDBOX
 FLOW_API_URL=https://sandbox.flow.cl/api
 MODEL=claude-sonnet-4-6
 IA_LIMITE_DIA=40
+LIMITE_EQUIPOS=2
+TRIAL_DIAS=10
 
   (PUBLIC_URL la agregas en el paso 5, cuando tengas el dominio.)
 
