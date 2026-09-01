@@ -446,6 +446,95 @@ app.post('/api/datos', (req, res) => {
 
 
 
+
+/* ===================== Admin API (clave secreta en header o query) =====================
+   Protección: ADMIN_KEY en variable de entorno de Railway.
+   Uso: GET /api/admin/licencias?key=TU_CLAVE
+        POST /api/admin/licencia/crear  { key, email, plan, dias? }
+        POST /api/admin/licencia/editar { key, licencia, plan?, dias?, email? }
+        DELETE /api/admin/licencia      { key, licencia }  → desactiva (no borra)
+   ===================================================================================== */
+
+const ADMIN_KEY = (process.env.ADMIN_KEY || '').trim();
+
+function checkAdmin(req, res) {
+  const k = (req.query.key || (req.body && req.body.key) || req.headers['x-admin-key'] || '').trim();
+  if (!ADMIN_KEY) { res.status(500).json({ ok: false, error: 'ADMIN_KEY no configurada en Railway.' }); return false; }
+  if (k !== ADMIN_KEY)  { res.status(401).json({ ok: false, error: 'Clave inválida.' }); return false; }
+  return true;
+}
+
+/* Listar todas las licencias */
+app.get('/api/admin/licencias', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const ahora = Date.now();
+  const lista = Object.entries(DB.licencias).map(([key, l]) => {
+    const activa = l.vence && ahora < l.vence;
+    const diasRestantes = l.vence ? Math.max(0, Math.ceil((l.vence - ahora) / 86400000)) : 0;
+    return {
+      licencia: key, email: l.email || '', plan: l.plan || 'free',
+      activa: !!activa, vence: l.vence || null, diasRestantes,
+      dispositivos: (l.dispositivos || []).length,
+      pagos: (l.pagos || []).length,
+      creado: l.creado || null
+    };
+  }).sort((a, b) => (b.creado || 0) - (a.creado || 0));
+  res.json({ ok: true, total: lista.length, activas: lista.filter(l => l.activa).length, licencias: lista });
+});
+
+/* Crear licencia manual (sin pago) */
+app.post('/api/admin/licencia/crear', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  let { email = '', plan = 'pro_mensual', dias } = req.body || {};
+  email = String(email).trim().toLowerCase();
+  if (!email) return res.status(400).json({ ok: false, error: 'Email requerido.' });
+  const planDef = PLANES[plan];
+  if (!planDef) return res.status(400).json({ ok: false, error: 'Plan inválido.' });
+  const duracion = dias ? parseInt(dias, 10) : planDef.dias;
+  const key = nuevaLicencia();
+  DB.licencias[key] = {
+    email, plan, creado: Date.now(),
+    vence: Date.now() + duracion * 24 * 60 * 60 * 1000,
+    pagos: [{ manual: true, fecha: Date.now(), dias: duracion }],
+    dispositivos: []
+  };
+  guardarDB(DB);
+  res.json({ ok: true, licencia: key, email, plan, dias: duracion, vence: DB.licencias[key].vence });
+});
+
+/* Editar licencia: cambiar plan, extender días, cambiar email */
+app.post('/api/admin/licencia/editar', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const { licencia: key, plan, dias, email } = req.body || {};
+  const l = DB.licencias[key];
+  if (!l) return res.status(404).json({ ok: false, error: 'Licencia no encontrada.' });
+  if (email) l.email = String(email).trim().toLowerCase();
+  if (plan) {
+    if (!PLANES[plan]) return res.status(400).json({ ok: false, error: 'Plan inválido.' });
+    l.plan = plan;
+  }
+  if (dias) {
+    const d = parseInt(dias, 10);
+    const base = (l.vence && l.vence > Date.now()) ? l.vence : Date.now();
+    l.vence = base + d * 24 * 60 * 60 * 1000;
+    (l.pagos = l.pagos || []).push({ manual: true, fecha: Date.now(), dias: d });
+  }
+  guardarDB(DB);
+  const est = estadoLicencia(key);
+  res.json({ ok: true, licencia: key, ...est });
+});
+
+/* Desactivar licencia (pone vence en el pasado) */
+app.post('/api/admin/licencia/desactivar', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const { licencia: key } = req.body || {};
+  const l = DB.licencias[key];
+  if (!l) return res.status(404).json({ ok: false, error: 'Licencia no encontrada.' });
+  l.vence = Date.now() - 1;
+  guardarDB(DB);
+  res.json({ ok: true, licencia: key, activa: false });
+});
+
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
   app.listen(PORT, () => console.log(`Finanzas backend en :${PORT} · ${MODEL} · Flow ${FLOW_API_URL}`));
