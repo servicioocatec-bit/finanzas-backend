@@ -299,7 +299,8 @@ function renderTabla(lista) {
       <td><div class="actions">
         <button class="btn btn-ghost btn-sm" onclick="copiar('${l.licencia}')"><i class="fa-solid fa-copy"></i></button>
         <button class="btn btn-warn btn-sm" onclick="abrirEditar('${l.licencia}')"><i class="fa-solid fa-pen"></i> Editar</button>
-        ${l.activa ? `<button class="btn btn-danger btn-sm" onclick="desactivar('${l.licencia}')"><i class="fa-solid fa-ban"></i></button>` : ''}
+        ${l.activa ? `<button class="btn btn-danger btn-sm" onclick="desactivar('${l.licencia}')" title="Desactivar"><i class="fa-solid fa-ban"></i></button>` : ''}
+        <button class="btn btn-danger btn-sm" onclick="eliminar('${l.licencia}')" title="Eliminar permanentemente" style="opacity:.7"><i class="fa-solid fa-trash"></i></button>
       </div></td>
     </tr>`;
   }).join('');
@@ -353,6 +354,16 @@ async function desactivar(key) {
   const d = await api('/api/admin/licencia/desactivar', 'POST', { licencia: key });
   if (!d.ok) return toast(d.error, 'err');
   toast('Licencia desactivada', 'ok'); cargar();
+}
+
+/* ── Eliminar ── */
+async function eliminar(key) {
+  const l = _datos.find(x => x.licencia === key);
+  const quien = l && l.email ? l.email : key;
+  if (!confirm(`⚠️ Eliminar permanentemente la cuenta de ${quien}\n\nEsto borra la licencia y todos sus datos de sincronización. No se puede deshacer.`)) return;
+  const d = await api('/api/admin/licencia/eliminar', 'POST', { licencia: key });
+  if (!d.ok) return toast(d.error, 'err');
+  toast('Cuenta eliminada', 'ok'); cargar();
 }
 
 /* ── Helpers ── */
