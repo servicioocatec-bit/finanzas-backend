@@ -184,12 +184,23 @@ async function flowGet(servicio, params) {
   return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
 }
 
-/* ===================== Salud ===================== */
-app.get('/', (_req, res) => res.json({
-  ok: true, servicio: 'finanzas-backend', modelo: MODEL,
-  flow: FLOW_API_URL.includes('sandbox') ? 'sandbox' : 'produccion',
-  planes: Object.keys(PLANES), trialDias: TRIAL_DIAS
-}));
+/* ===================== PWA static (va ANTES de las rutas API) ===================== */
+const PWA_DIR = path.join(__dirname, 'public');
+app.use(express.static(PWA_DIR));
+
+/* Ruta raíz: navegador → sirve la PWA; cliente API → devuelve JSON de salud */
+app.get('/', (req, res) => {
+  const accept = req.headers.accept || '';
+  if (accept.includes('text/html')) {
+    const idx = path.join(PWA_DIR, 'index.html');
+    if (fs.existsSync(idx)) return res.sendFile(idx);
+  }
+  res.json({
+    ok: true, servicio: 'finanzas-backend', modelo: MODEL,
+    flow: FLOW_API_URL.includes('sandbox') ? 'sandbox' : 'produccion',
+    planes: Object.keys(PLANES), trialDias: TRIAL_DIAS
+  });
+});
 
 /* ===================== Licencias ===================== */
 // Consultar estado de una licencia (atando el equipo que consulta)
@@ -433,12 +444,7 @@ app.post('/api/datos', (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ ok: false, error: 'Error interno al sincronizar.' }); }
 });
 
-/* ===================== Servir la PWA (static) =====================
-   La carpeta /public contiene la PWA. Railway la sirve en la misma
-   URL del backend, sin necesitar un host adicional.
-   ================================================================= */
-const PWA_DIR = path.join(__dirname, 'public');
-app.use(express.static(PWA_DIR));
+
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
