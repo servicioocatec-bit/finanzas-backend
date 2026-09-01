@@ -15,11 +15,24 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js" crossorigin="anonymous"></script>
+<script>
+/* Carga resiliente de librerías — si CDN falla, la app igual abre */
+function cargarScript(url, cb) {
+  var s = document.createElement('script');
+  s.src = url; s.async = true; s.crossOrigin = 'anonymous';
+  s.onload = cb || null;
+  s.onerror = function() { console.warn('[CFS] No se pudo cargar:', url); if(cb) cb(); };
+  document.head.appendChild(s);
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js" crossorigin="anonymous" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin="anonymous" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" crossorigin="anonymous" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js" crossorigin="anonymous" defer></script>
 <style>
+/* Safari iOS viewport fix */
+:root { --vh: 1vh; }
+
 :root{
   --bg:#f4f6f9; --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#eff3f8;
   --ink:#0c1320; --ink-2:#3b485c; --muted:#7a8aa0; --faint:#aab6c7;
@@ -55,7 +68,12 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--bg);color
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
 
 /* ===== LAYOUT ===== */
-.app{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+.app{display:grid;grid-template-columns:248px 1fr;min-height:calc(var(--vh,1vh)*100)}
+@media(max-width:768px){
+  .app{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .sidebar.open{display:flex;position:fixed;top:0;left:0;width:260px;height:100%;z-index:200;box-shadow:4px 0 20px rgba(0,0,0,.4)}
+}
 .sidebar{background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));color:#c4d0e0;display:flex;flex-direction:column;padding:22px 16px;position:sticky;top:0;height:100vh;border-right:1px solid rgba(255,255,255,.05)}
 .brand{display:flex;align-items:center;gap:.55rem;padding:0 8px 22px;font-family:'Syne',system-ui,sans-serif;font-weight:800;font-size:1.05rem;letter-spacing:-.015em;line-height:1.1;color:#fff}
 .brand .mk{width:32px;height:32px;border-radius:10px;flex:none;box-shadow:0 6px 16px -6px rgba(16,185,129,.55)}
@@ -129,7 +147,7 @@ table.tbl tbody tr:hover{background:var(--surface-2)}
 /* drawer + modal */
 .scrim{position:fixed;inset:0;background:rgba(7,11,19,.5);backdrop-filter:blur(3px);z-index:60;opacity:0;transition:opacity .25s}
 .scrim.show{opacity:1}
-.drawer{position:fixed;top:0;right:0;height:100vh;width:400px;max-width:92vw;background:var(--surface);z-index:70;box-shadow:var(--shadow-lg);transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
+.drawer{position:fixed;top:0;right:0;height:calc(var(--vh,1vh)*100);width:400px;max-width:92vw;background:var(--surface);z-index:70;box-shadow:var(--shadow-lg);transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
 .drawer.show{transform:none}
 .drawer-h{padding:20px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
 .drawer-b{padding:22px;overflow-y:auto;flex:1}
@@ -170,8 +188,27 @@ table.tbl tbody tr:hover{background:var(--surface-2)}
 .spin{width:20px;height:20px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
+<script>
+/* Safari iOS: corregir 100vh que incluye la barra del navegador */
+(function(){
+  function setVH(){ document.documentElement.style.setProperty('--vh', (window.innerHeight * 0.01) + 'px'); }
+  setVH();
+  window.addEventListener('resize', setVH);
+  window.addEventListener('orientationchange', function(){ setTimeout(setVH, 200); });
+})();
+/* Capturar errores globales para evitar pantalla en blanco silenciosa */
+window.onerror = function(msg, src, line) {
+  console.error('[CFS Error]', msg, src, line);
+  return false;
+};
+</script>
 </head>
 <body>
+<div id="sidebar-overlay" onclick="toggleSidebar()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:199"></div>
+<div id="mob-topbar" style="display:none;align-items:center;gap:12px;padding:10px 14px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50">
+  <button onclick="toggleSidebar()" style="background:transparent;border:1px solid var(--border);border-radius:8px;padding:.4rem .55rem;color:var(--ink);cursor:pointer;font-size:1rem;line-height:1"><i class="fa-solid fa-bars"></i></button>
+  <span style="font-weight:700;font-size:.9rem">Control <span style="color:var(--accent)">Finanzas</span></span>
+</div>
 <div class="app">
   <!-- ===== SIDEBAR ===== -->
   <aside class="sidebar" id="sidebar">
@@ -1457,6 +1494,23 @@ window.addEventListener('DOMContentLoaded',()=>{
 
 <script>
 /* ── PWA: Service Worker ── */
+/* ── Sidebar móvil ── */
+function toggleSidebar(){
+  var sb=document.getElementById('sidebar');
+  var ov=document.getElementById('sidebar-overlay');
+  if(!sb||!ov)return;
+  var abierto=sb.classList.toggle('open');
+  ov.style.display=abierto?'block':'none';
+}
+function checkMobile(){
+  var bar=document.getElementById('mob-topbar');
+  if(bar) bar.style.display=window.innerWidth<=768?'flex':'none';
+  var sb=document.getElementById('sidebar');
+  if(sb&&window.innerWidth>768){sb.classList.remove('open');document.getElementById('sidebar-overlay').style.display='none';}
+}
+window.addEventListener('resize',checkMobile);
+document.addEventListener('DOMContentLoaded',checkMobile);
+
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
     navigator.serviceWorker.register('./sw.js')
