@@ -192,15 +192,23 @@
     <div class="field"><label>Nuevo email (dejar vacío para no cambiar)</label><input type="email" id="e-email" placeholder=""></div>
     <div class="field">
       <label>Cambiar plan</label>
-      <select id="e-plan">
+      <select id="e-plan" onchange="if(this.value&&!document.getElementById('e-dias').value){const d={pro_mensual:30,pro_anual:365,negocio_mensual:30,negocio_anual:365};document.getElementById('e-dias').value=d[this.value]||'';}">
         <option value="">— no cambiar —</option>
-        <option value="pro_mensual">Pro mensual</option>
-        <option value="pro_anual">Pro anual</option>
-        <option value="negocio_mensual">Negocio mensual</option>
-        <option value="negocio_anual">Negocio anual</option>
+        <option value="pro_mensual">Pro mensual (30 días)</option>
+        <option value="pro_anual">Pro anual (365 días)</option>
+        <option value="negocio_mensual">Negocio mensual (30 días)</option>
+        <option value="negocio_anual">Negocio anual (365 días)</option>
       </select>
     </div>
-    <div class="field"><label>Extender N días (se suman al vencimiento actual)</label><input type="number" id="e-dias" placeholder="ej. 30"></div>
+    <div class="field">
+      <label>Activar / Extender</label>
+      <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="usarDiasPlan(30)">+30 días</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="usarDiasPlan(365)">+365 días</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="usarDiasPlan(0)">Activar por duración del plan</button>
+      </div>
+      <input type="number" id="e-dias" placeholder="o escribe los días manualmente">
+    </div>
     <div class="field"><label>Límite de dispositivos (1–20)</label><input type="number" id="e-limite" placeholder="dejar vacío para no cambiar" min="1" max="20"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
@@ -360,6 +368,18 @@ function abrirEditar(key) {
   document.getElementById('e-dias').value   = '';
   document.getElementById('e-limite').value = '';
   document.getElementById('modal-editar').classList.remove('hidden');
+}
+const DIAS_PLAN = { pro_mensual:30, pro_anual:365, negocio_mensual:30, negocio_anual:365 };
+function usarDiasPlan(dias) {
+  if (dias === 0) {
+    // Usar duración del plan seleccionado
+    const plan = document.getElementById('e-plan').value;
+    const d = DIAS_PLAN[plan];
+    if (!d) { alert('Selecciona primero el plan para usar su duración.'); return; }
+    document.getElementById('e-dias').value = d;
+  } else {
+    document.getElementById('e-dias').value = dias;
+  }
 }
 async function guardarEdicion() {
   const email  = document.getElementById('e-email').value.trim();
