@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Control Finanzas Studio</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous">
+<style>
+  :root {
+    --bg:       #0b1220;
+    --surface:  #111827;
+    --surface2: #1a2535;
+    --border:   rgba(255,255,255,.08);
+    --text:     #eaf0f8;
+    --muted:    #7a8fa8;
+    --accent:   #0e7c5a;
+    --accent2:  #34d399;
+    --gold:     #f59e0b;
+    --neg:      #ef4444;
+    --radius:   12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;font-size:.9rem;min-height:100vh}
+  a{color:var(--accent2);text-decoration:none}
+
+  /* ── Layout ── */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:14px}
+  .topbar .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;font-size:1rem;flex-shrink:0}
+  .topbar h1{font-size:1rem;font-weight:700}
+  .topbar .sub{font-size:.75rem;color:var(--muted)}
+  .topbar .spacer{flex:1}
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:.2rem .6rem;border-radius:20px;font-size:.7rem;font-weight:600}
+  .badge.ok{background:rgba(52,211,153,.12);color:var(--accent2)}
+  .badge.warn{background:rgba(245,158,11,.12);color:var(--gold)}
+  .badge.err{background:rgba(239,68,68,.12);color:var(--neg)}
+
+  .container{max-width:1100px;margin:0 auto;padding:24px 16px}
+
+  /* ── Auth ── */
+  #auth-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;gap:16px}
+  #auth-screen .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:32px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:14px}
+  #auth-screen h2{font-size:1.1rem;font-weight:700;text-align:center}
+
+  /* ── Cards de stats ── */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+  .stat .val{font-size:1.8rem;font-weight:800;line-height:1}
+  .stat .lbl{font-size:.72rem;color:var(--muted);margin-top:4px}
+
+  /* ── Toolbar ── */
+  .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .toolbar input{flex:1;min-width:180px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.5rem .8rem;font-size:.85rem;outline:none}
+  .toolbar input:focus{border-color:rgba(52,211,153,.4)}
+
+  /* ── Botones ── */
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:.5rem 1rem;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;border:none;transition:opacity .15s}
+  .btn:hover{opacity:.85}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .btn-warn{background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.3)}
+  .btn-danger{background:rgba(239,68,68,.12);color:var(--neg);border:1px solid rgba(239,68,68,.25)}
+  .btn-sm{padding:.3rem .65rem;font-size:.75rem}
+
+  /* ── Tabla ── */
+  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  th{background:var(--surface2);color:var(--muted);font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;text-align:left}
+  td{padding:11px 14px;border-top:1px solid var(--border);font-size:.83rem;vertical-align:middle}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .lic-key{font-family:monospace;font-size:.78rem;color:var(--muted)}
+  .actions{display:flex;gap:6px;flex-wrap:wrap}
+
+  /* ── Modal ── */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:grid;place-items:center;z-index:100;padding:16px}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:100%;max-width:440px;display:flex;flex-direction:column;gap:16px}
+  .modal h3{font-size:1rem;font-weight:700}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:.75rem;color:var(--muted);font-weight:600}
+  .field input,.field select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.5rem .8rem;font-size:.85rem;outline:none}
+  .field input:focus,.field select:focus{border-color:rgba(52,211,153,.4)}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end}
+  .hidden{display:none!important}
+
+  /* ── Toast ── */
+  #toast{position:fixed;bottom:24px;right:24px;padding:.7rem 1.1rem;border-radius:10px;font-size:.83rem;font-weight:600;z-index:200;opacity:0;transition:opacity .2s;pointer-events:none}
+  #toast.show{opacity:1}
+  #toast.ok{background:#0e7c5a;color:#fff}
+  #toast.err{background:#b91c1c;color:#fff}
+
+  @media(max-width:600px){
+    th:nth-child(3),td:nth-child(3),th:nth-child(5),td:nth-child(5){display:none}
+    .topbar h1{font-size:.9rem}
+  }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo"><i class="fa-solid fa-shield-halved"></i></div>
+  <div>
+    <h1>Admin · Control Finanzas Studio</h1>
+    <div class="sub">Panel de licencias</div>
+  </div>
+  <div class="spacer"></div>
+  <span id="conn-badge" class="badge warn"><i class="fa-solid fa-circle-notch fa-spin"></i> Conectando…</span>
+  <button class="btn btn-ghost" onclick="logout()"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+</div>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen">
+  <div class="card">
+    <h2><i class="fa-solid fa-key" style="color:var(--accent2);margin-right:6px"></i>Acceso admin</h2>
+    <div class="field">
+      <label>Clave secreta (ADMIN_KEY)</label>
+      <input type="password" id="inp-key" placeholder="sk-admin-…" onkeydown="if(event.key==='Enter')conectar()">
+    </div>
+    <button class="btn btn-primary" onclick="conectar()"><i class="fa-solid fa-right-to-bracket"></i> Entrar</button>
+    <p id="auth-err" style="color:var(--neg);font-size:.78rem;text-align:center;min-height:16px"></p>
+  </div>
+</div>
+
+<!-- MAIN PANEL -->
+<div id="panel" class="container hidden">
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="val" id="s-total">—</div><div class="lbl">Licencias totales</div></div>
+    <div class="stat"><div class="val" id="s-activas" style="color:var(--accent2)">—</div><div class="lbl">Activas ahora</div></div>
+    <div class="stat"><div class="val" id="s-vencidas" style="color:var(--neg)">—</div><div class="lbl">Vencidas</div></div>
+    <div class="stat"><div class="val" id="s-pagos" style="color:var(--gold)">—</div><div class="lbl">Pagos registrados</div></div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <input type="text" id="buscar" placeholder="Buscar por email o clave…" oninput="filtrar()">
+    <button class="btn btn-ghost" onclick="cargar()"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+    <button class="btn btn-primary" onclick="abrirCrear()"><i class="fa-solid fa-plus"></i> Nueva licencia</button>
+  </div>
+
+  <!-- Tabla -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Licencia</th>
+          <th>Plan</th>
+          <th>Estado</th>
+          <th>Vence</th>
+          <th>Dispositivos</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="empty" class="hidden" style="padding:40px;text-align:center;color:var(--muted)">
+      <i class="fa-solid fa-inbox" style="font-size:2rem;margin-bottom:10px;display:block"></i>
+      Sin resultados
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CREAR -->
+<div id="modal-crear" class="overlay hidden">
+  <div class="modal">
+    <h3><i class="fa-solid fa-plus" style="color:var(--accent2);margin-right:6px"></i>Nueva licencia manual</h3>
+    <div class="field"><label>Email del usuario</label><input type="email" id="c-email" placeholder="usuario@ejemplo.com"></div>
+    <div class="field">
+      <label>Plan</label>
+      <select id="c-plan">
+        <option value="pro_mensual">Pro mensual (30 días)</option>
+        <option value="pro_anual">Pro anual (365 días)</option>
+        <option value="negocio_mensual">Negocio mensual (30 días)</option>
+        <option value="negocio_anual">Negocio anual (365 días)</option>
+      </select>
+    </div>
+    <div class="field"><label>Días personalizados (opcional, sobreescribe el plan)</label><input type="number" id="c-dias" placeholder="ej. 60"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="crear()"><i class="fa-solid fa-check"></i> Crear</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR -->
+<div id="modal-editar" class="overlay hidden">
+  <div class="modal">
+    <h3><i class="fa-solid fa-pen" style="color:var(--gold);margin-right:6px"></i>Editar licencia</h3>
+    <p id="e-lic" style="font-family:monospace;font-size:.75rem;color:var(--muted)"></p>
+    <div class="field"><label>Nuevo email (dejar vacío para no cambiar)</label><input type="email" id="e-email" placeholder=""></div>
+    <div class="field">
+      <label>Cambiar plan</label>
+      <select id="e-plan">
+        <option value="">— no cambiar —</option>
+        <option value="pro_mensual">Pro mensual</option>
+        <option value="pro_anual">Pro anual</option>
+        <option value="negocio_mensual">Negocio mensual</option>
+        <option value="negocio_anual">Negocio anual</option>
+      </select>
+    </div>
+    <div class="field"><label>Extender N días (se suman al vencimiento actual)</label><input type="number" id="e-dias" placeholder="ej. 30"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-warn" onclick="guardarEdicion()"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+/* ── Config ── */
+const API = window.location.origin; // mismo dominio que la PWA
+let CLAVE = sessionStorage.getItem('cfs_admin_key') || '';
+let _datos = [];
+let _editKey = '';
+
+/* ── Auth ── */
+function conectar() {
+  const k = document.getElementById('inp-key').value.trim();
+  if (!k) return;
+  CLAVE = k;
+  cargar();
+}
+function logout() {
+  CLAVE = ''; sessionStorage.removeItem('cfs_admin_key');
+  document.getElementById('panel').classList.add('hidden');
+  document.getElementById('auth-screen').classList.remove('hidden');
+  document.getElementById('inp-key').value = '';
+  document.getElementById('conn-badge').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Conectando…';
+  document.getElementById('conn-badge').className = 'badge warn';
+}
+
+/* ── Fetch helper ── */
+async function api(path, method='GET', body=null) {
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${API}${path}${method==='GET' ? sep+'key='+encodeURIComponent(CLAVE) : ''}`;
+  const opts = { method, headers: {'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify({ ...body, key: CLAVE });
+  const r = await fetch(url, opts);
+  return r.json();
+}
+
+/* ── Cargar licencias ── */
+async function cargar() {
+  try {
+    const d = await api('/api/admin/licencias');
+    if (!d.ok) {
+      document.getElementById('auth-err').textContent = d.error || 'Error';
+      document.getElementById('conn-badge').innerHTML = '<i class="fa-solid fa-xmark"></i> Sin acceso';
+      document.getElementById('conn-badge').className = 'badge err';
+      return;
+    }
+    sessionStorage.setItem('cfs_admin_key', CLAVE);
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('panel').classList.remove('hidden');
+    document.getElementById('conn-badge').innerHTML = '<i class="fa-solid fa-circle" style="font-size:.5rem"></i> Conectado';
+    document.getElementById('conn-badge').className = 'badge ok';
+
+    _datos = d.licencias;
+    // Stats
+    const pagos = _datos.reduce((s,l) => s + l.pagos, 0);
+    document.getElementById('s-total').textContent   = d.total;
+    document.getElementById('s-activas').textContent = d.activas;
+    document.getElementById('s-vencidas').textContent = d.total - d.activas;
+    document.getElementById('s-pagos').textContent   = pagos;
+    filtrar();
+  } catch(e) {
+    toast('Error de red: ' + e.message, 'err');
+  }
+}
+
+/* ── Filtrar ── */
+function filtrar() {
+  const q = document.getElementById('buscar').value.toLowerCase();
+  const lista = q ? _datos.filter(l => l.email.includes(q) || l.licencia.toLowerCase().includes(q)) : _datos;
+  renderTabla(lista);
+}
+
+/* ── Render tabla ── */
+function renderTabla(lista) {
+  const tbody = document.getElementById('tbody');
+  document.getElementById('empty').classList.toggle('hidden', lista.length > 0);
+  tbody.innerHTML = lista.map(l => {
+    const estado = l.activa
+      ? `<span class="badge ok"><i class="fa-solid fa-circle" style="font-size:.45rem"></i> Activa</span>`
+      : `<span class="badge err"><i class="fa-solid fa-circle" style="font-size:.45rem"></i> Vencida</span>`;
+    const vence = l.vence ? new Date(l.vence).toLocaleDateString('es-CL') + (l.activa ? ` <span style="color:var(--muted);font-size:.72rem">(${l.diasRestantes}d)</span>` : '') : '—';
+    const planLabel = { pro_mensual:'Pro Mensual', pro_anual:'Pro Anual', negocio_mensual:'Negocio Mensual', negocio_anual:'Negocio Anual', free:'Free' };
+    return `<tr>
+      <td>${l.email || '<span style="color:var(--muted)">—</span>'}</td>
+      <td><span class="lic-key">${l.licencia}</span></td>
+      <td>${planLabel[l.plan] || l.plan}</td>
+      <td>${estado}</td>
+      <td>${vence}</td>
+      <td style="color:var(--muted)">${l.dispositivos}/2</td>
+      <td><div class="actions">
+        <button class="btn btn-ghost btn-sm" onclick="copiar('${l.licencia}')"><i class="fa-solid fa-copy"></i></button>
+        <button class="btn btn-warn btn-sm" onclick="abrirEditar('${l.licencia}')"><i class="fa-solid fa-pen"></i> Editar</button>
+        ${l.activa ? `<button class="btn btn-danger btn-sm" onclick="desactivar('${l.licencia}')"><i class="fa-solid fa-ban"></i></button>` : ''}
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Crear ── */
+function abrirCrear() {
+  document.getElementById('c-email').value = '';
+  document.getElementById('c-dias').value  = '';
+  document.getElementById('modal-crear').classList.remove('hidden');
+  setTimeout(() => document.getElementById('c-email').focus(), 50);
+}
+async function crear() {
+  const email = document.getElementById('c-email').value.trim();
+  const plan  = document.getElementById('c-plan').value;
+  const dias  = document.getElementById('c-dias').value;
+  if (!email) return toast('Email requerido', 'err');
+  const d = await api('/api/admin/licencia/crear', 'POST', { email, plan, dias: dias||undefined });
+  if (!d.ok) return toast(d.error, 'err');
+  toast(`Licencia creada: ${d.licencia}`, 'ok');
+  cerrarModal(); cargar();
+}
+
+/* ── Editar ── */
+function abrirEditar(key) {
+  _editKey = key;
+  const l = _datos.find(x => x.licencia === key);
+  document.getElementById('e-lic').textContent = key;
+  document.getElementById('e-email').value = l ? l.email : '';
+  document.getElementById('e-plan').value  = '';
+  document.getElementById('e-dias').value  = '';
+  document.getElementById('modal-editar').classList.remove('hidden');
+}
+async function guardarEdicion() {
+  const email = document.getElementById('e-email').value.trim();
+  const plan  = document.getElementById('e-plan').value;
+  const dias  = document.getElementById('e-dias').value;
+  const body  = { licencia: _editKey };
+  if (email) body.email = email;
+  if (plan)  body.plan  = plan;
+  if (dias)  body.dias  = parseInt(dias, 10);
+  const d = await api('/api/admin/licencia/editar', 'POST', body);
+  if (!d.ok) return toast(d.error, 'err');
+  toast('Licencia actualizada', 'ok');
+  cerrarModal(); cargar();
+}
+
+/* ── Desactivar ── */
+async function desactivar(key) {
+  if (!confirm(`¿Desactivar la licencia ${key}?`)) return;
+  const d = await api('/api/admin/licencia/desactivar', 'POST', { licencia: key });
+  if (!d.ok) return toast(d.error, 'err');
+  toast('Licencia desactivada', 'ok'); cargar();
+}
+
+/* ── Helpers ── */
+function copiar(txt) {
+  navigator.clipboard.writeText(txt).then(() => toast('Copiado', 'ok'));
+}
+function cerrarModal() {
+  document.querySelectorAll('.overlay').forEach(o => o.classList.add('hidden'));
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModal(); });
+
+let _toastTimer;
+function toast(msg, tipo='ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `show ${tipo}`;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { t.className = ''; }, 3000);
+}
+
+/* ── Init ── */
+if (CLAVE) cargar();
+</script>
+</body>
+</html>
