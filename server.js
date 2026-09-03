@@ -207,13 +207,13 @@ async function flowGet(servicio, params) {
 const PWA_DIR = path.join(__dirname, 'public');
 app.use('/app', express.static(PWA_DIR));
 
-/* Ruta raíz: móvil → index-mobile.html | desktop → index.html | API → JSON */
+/* Ruta raíz: móvil → /app/ (index.html móvil) | desktop → /app/index-desktop.html | API → JSON */
 app.get('/', (req, res) => {
   const accept = req.headers.accept || '';
   if (accept.includes('text/html')) {
     const ua = req.headers['user-agent'] || '';
     const isMobile = /iPhone|Android|Mobile|iPad/i.test(ua);
-    return res.redirect(isMobile ? '/app/index-mobile.html' : '/app/');
+    return res.redirect(isMobile ? '/app/' : '/app/index-desktop.html');
   }
   res.json({
     ok: true, servicio: 'finanzas-backend', modelo: MODEL,
