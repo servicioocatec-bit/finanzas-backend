@@ -1040,7 +1040,7 @@ function renderPresupuesto(d) {
     return `<div class="card pad" style="margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:6px">
         <span style="font-weight:600">${e.cat}</span>
-        <span class="num" style="color:${ex?'var(--neg)':'var(--g2)';font-weight:700}">${ex?'+':''}${fmt(varz)}</span>
+        <span class="num" style="font-weight:700;color:${ex?'var(--neg)':'var(--g2)'}">${ex?'+':''}${fmt(varz)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--ink2);margin-bottom:6px">
         <span>${fmt(real)} gastado</span><span>${fmt(ppto)} presupuestado</span>
