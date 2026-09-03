@@ -199,17 +199,18 @@ async function flowGet(servicio, params) {
   return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
 }
 
-/* ===================== PWA static (va ANTES de las rutas API) ===================== */
+/* ===================== PWA static =====================
+   Sirve desde /app/ igual que Acopia usa /jefe/
+   Evita conflicto con la ruta raíz que devuelve JSON
+   El admin queda en /app/admin.html
+   ====================================================== */
 const PWA_DIR = path.join(__dirname, 'public');
-app.use(express.static(PWA_DIR));
+app.use('/app', express.static(PWA_DIR));
 
-/* Ruta raíz: navegador → sirve la PWA; cliente API → devuelve JSON de salud */
+/* Ruta raíz: redirige navegadores a /app/; API recibe JSON */
 app.get('/', (req, res) => {
   const accept = req.headers.accept || '';
-  if (accept.includes('text/html')) {
-    const idx = path.join(PWA_DIR, 'index.html');
-    if (fs.existsSync(idx)) return res.sendFile(idx);
-  }
+  if (accept.includes('text/html')) return res.redirect('/app/');
   res.json({
     ok: true, servicio: 'finanzas-backend', modelo: MODEL,
     flow: FLOW_API_URL.includes('sandbox') ? 'sandbox' : 'produccion',
