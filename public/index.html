@@ -956,7 +956,7 @@ function actualizar(animar) {
 
   render503020(d); renderFondo(); renderIndicadores(d); renderDona(d);
   renderTabla(); renderPresupuesto(d); renderMetas();
-  $('alerta').classList.toggle('hidden', !(d.egresos > d.baseIngreso * CONFIG.alertaPct && d.baseIngreso > 0));
+  const _al=$('alerta')||$('plan-alerta'); if(_al)_al.classList.toggle('hidden', !(d.egresos > d.baseIngreso * CONFIG.alertaPct && d.baseIngreso > 0));
   guardar();
 }
 
