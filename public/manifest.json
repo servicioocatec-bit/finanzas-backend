@@ -2,7 +2,7 @@
   "name": "Control Finanzas Studio",
   "short_name": "Finanzas",
   "description": "Gestión financiera personal con Asesor IA para Chile",
-  "start_url": "./",
+  "start_url": "/app/",
   "display": "standalone",
   "background_color": "#0b1220",
   "theme_color": "#0e7c5a",
@@ -22,5 +22,9 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["finance", "productivity"]
+  "categories": [
+    "finance",
+    "productivity"
+  ],
+  "scope": "/app/"
 }
