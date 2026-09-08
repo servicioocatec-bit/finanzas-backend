@@ -410,14 +410,24 @@ app.post('/api/asesor', async (req, res) => {
 
 function mergeArray(servidor, cliente) {
   const mapa = new Map();
+  // Base: datos del servidor
   for (const r of (servidor || [])) mapa.set(r.id, r);
+  // Cliente: solo sobreescribe si su versión es más reciente
   for (const r of (cliente || [])) {
     const s = mapa.get(r.id);
-    // Tombstone: el registro más reciente gana (incluyendo deleted:true)
-    if (!s || (r.updatedAt || r.id) >= (s.updatedAt || s.id)) mapa.set(r.id, r);
+    if (!s) {
+      // Registro nuevo del cliente
+      mapa.set(r.id, r);
+    } else if (s.deleted && !r.deleted) {
+      // Servidor dice deleted, cliente no sabe — el servidor gana (es más reciente)
+      // Solo dejar pasar si el cliente tiene updatedAt posterior al deleted del servidor
+      if ((r.updatedAt || 0) > (s.updatedAt || 0)) mapa.set(r.id, r);
+      // Si no, el deleted del servidor se mantiene
+    } else {
+      // Caso normal: gana el más reciente
+      if ((r.updatedAt || r.id) >= (s.updatedAt || s.id)) mapa.set(r.id, r);
+    }
   }
-  // Mantener los deleted en el servidor para propagarlos a otros dispositivos
-  // pero devolver solo los vivos al cliente para no llenar la lista
   return Array.from(mapa.values());
 }
 
