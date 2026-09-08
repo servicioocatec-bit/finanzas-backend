@@ -3,27 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#0e7c5a">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Finanzas">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
 <title>Control Finanzas Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
-<script src="vendor/chart.umd.min.js"></script>
+<script src="vendor/chart.umd.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jspdf.plugin.autotable.min.js"></script>
-
 <style>
-/* Safari iOS viewport fix */
-:root { --vh: 1vh; }
-
 :root{
   --bg:#f4f6f9; --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#eff3f8;
   --ink:#0c1320; --ink-2:#3b485c; --muted:#7a8aa0; --faint:#aab6c7;
@@ -51,7 +40,7 @@ html.dark{
   --shadow:0 4px 16px -6px rgba(0,0,0,.55);
   --shadow-lg:0 30px 60px -28px rgba(0,0,0,.75);
 }
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+*{margin:0;padding:0;box-sizing:border-box}
 .hidden{display:none!important}
 body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;transition:background .3s,color .3s}
 .disp{font-family:'Syne',sans-serif;letter-spacing:-.02em}
@@ -59,12 +48,7 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--bg);color
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
 
 /* ===== LAYOUT ===== */
-.app{display:grid;grid-template-columns:248px 1fr;min-height:calc(var(--vh,1vh)*100)}
-@media(max-width:768px){
-  .app{grid-template-columns:1fr}
-  .sidebar{display:none}
-  .sidebar.open{display:flex;position:fixed;top:0;left:0;width:260px;height:100%;z-index:200;box-shadow:4px 0 20px rgba(0,0,0,.4)}
-}
+.app{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
 .sidebar{background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));color:#c4d0e0;display:flex;flex-direction:column;padding:22px 16px;position:sticky;top:0;height:100vh;border-right:1px solid rgba(255,255,255,.05)}
 .brand{display:flex;align-items:center;gap:.55rem;padding:0 8px 22px;font-family:'Syne',system-ui,sans-serif;font-weight:800;font-size:1.05rem;letter-spacing:-.015em;line-height:1.1;color:#fff}
 .brand .mk{width:32px;height:32px;border-radius:10px;flex:none;box-shadow:0 6px 16px -6px rgba(16,185,129,.55)}
@@ -138,7 +122,7 @@ table.tbl tbody tr:hover{background:var(--surface-2)}
 /* drawer + modal */
 .scrim{position:fixed;inset:0;background:rgba(7,11,19,.5);backdrop-filter:blur(3px);z-index:60;opacity:0;transition:opacity .25s}
 .scrim.show{opacity:1}
-.drawer{position:fixed;top:0;right:0;height:calc(var(--vh,1vh)*100);width:400px;max-width:92vw;background:var(--surface);z-index:70;box-shadow:var(--shadow-lg);transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
+.drawer{position:fixed;top:0;right:0;height:100vh;width:400px;max-width:92vw;background:var(--surface);z-index:70;box-shadow:var(--shadow-lg);transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
 .drawer.show{transform:none}
 .drawer-h{padding:20px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
 .drawer-b{padding:22px;overflow-y:auto;flex:1}
@@ -179,27 +163,8 @@ table.tbl tbody tr:hover{background:var(--surface-2)}
 .spin{width:20px;height:20px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
-<script>
-/* Safari iOS: corregir 100vh que incluye la barra del navegador */
-(function(){
-  function setVH(){ document.documentElement.style.setProperty('--vh', (window.innerHeight * 0.01) + 'px'); }
-  setVH();
-  window.addEventListener('resize', setVH);
-  window.addEventListener('orientationchange', function(){ setTimeout(setVH, 200); });
-})();
-/* Capturar errores globales para evitar pantalla en blanco silenciosa */
-window.onerror = function(msg, src, line) {
-  console.error('[CFS Error]', msg, src, line);
-  return false;
-};
-</script>
 </head>
 <body>
-<div id="sidebar-overlay" onclick="toggleSidebar()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:199"></div>
-<div id="mob-topbar" style="display:none;align-items:center;gap:12px;padding:10px 14px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50">
-  <button onclick="toggleSidebar()" style="background:transparent;border:1px solid var(--border);border-radius:8px;padding:.4rem .55rem;color:var(--ink);cursor:pointer;font-size:1rem;line-height:1"><i class="fa-solid fa-bars"></i></button>
-  <span style="font-weight:700;font-size:.9rem">Control <span style="color:var(--accent)">Finanzas</span></span>
-</div>
 <div class="app">
   <!-- ===== SIDEBAR ===== -->
   <aside class="sidebar" id="sidebar">
@@ -214,13 +179,8 @@ window.onerror = function(msg, src, line) {
       <button class="nav-i" data-view="reportes" onclick="showView('reportes')"><i class="fa-solid fa-file-export"></i> Reportes</button>
       <button class="nav-i" data-view="ajustes" onclick="showView('ajustes')"><i class="fa-solid fa-sliders"></i> Ajustes</button>
     </nav>
-    <div class="side-foot">Control Finanzas · v11 · <span style="color:var(--accent-2)">PWA</span><br>
-  Ocaranza Ing. · Coquimbo 🇨🇱
+    <div class="side-foot">Control Finanzas · v11<br>Ocaranza Ing. · Coquimbo 🇨🇱
   <div id="sync-estado" style="margin-top:8px;font-size:.7rem;color:var(--faint);display:flex;align-items:center;min-height:14px"></div>
-  <button id="btn-instalar-pwa" onclick="instalarPWA()" title="Instalar en tu dispositivo"
-    style="display:none;margin-top:8px;width:100%;padding:.45rem .7rem;border-radius:9px;border:1px solid rgba(16,185,129,.4);background:rgba(16,185,129,.1);color:var(--accent-2);font-size:.75rem;font-weight:600;cursor:pointer;font-family:inherit">
-    <i class="fa-solid fa-download" style="margin-right:.35rem"></i>Instalar app
-  </button>
 </div>
   </aside>
 
@@ -690,7 +650,7 @@ function migrarDatos(){
     /* La subcategoría de Vivienda se dividió en "Arriendo" y "Dividendo / crédito hipotecario".
        Los registros antiguos "Arriendo / Dividendo" pasan a "Arriendo" (el usuario puede recategorizar). */
     movimientos.forEach(m=>{if(m.subcategoria==='Arriendo / Dividendo')m.subcategoria='Arriendo';});
-    recurrentes.forEach(r=>{if(r.subcategoria==='Arriendo / Dividendo')r.subcategoria='Arriendo';});
+    recurrentes.filter(r=>!r.deleted).forEach(r=>{if(r.subcategoria==='Arriendo / Dividendo')r.subcategoria='Arriendo';});
   }
   localStorage.setItem('cfp_schema',JSON.stringify(SCHEMA_VERSION));
 }
@@ -1319,7 +1279,7 @@ async function preguntarIA(){
 function renderRecurrentes(){
   const cont=$('rec-list');if(!cont)return;
   if(!recurrentes.length){cont.innerHTML=`<p class="cap" style="font-size:.78rem">Sin recurrentes. Agrega arriendo, suscripciones, sueldo…</p>`;return;}
-  cont.innerHTML=recurrentes.map(r=>`<div style="display:flex;align-items:center;gap:8px;font-size:.82rem;padding:.3rem 0;border-bottom:1px solid var(--line-2)"><span style="flex:1"><strong>${escapeHtml(r.descripcion||'')}</strong> <span class="cap">· ${escapeHtml(r.categoria||'')} · día ${r.dia}</span></span><span class="num" style="font-weight:600">${fmt(r.monto)}</span><button class="icon-btn" style="width:26px;height:26px;display:grid;color:var(--neg)" onclick="eliminarRecurrente(${r.id})"><i class="fa-regular fa-trash-can" style="font-size:.66rem"></i></button></div>`).join('');
+  cont.innerHTML=recurrentes.filter(r=>!r.deleted).map(r=>`<div style="display:flex;align-items:center;gap:8px;font-size:.82rem;padding:.3rem 0;border-bottom:1px solid var(--line-2)"><span style="flex:1"><strong>${escapeHtml(r.descripcion||'')}</strong> <span class="cap">· ${escapeHtml(r.categoria||'')} · día ${r.dia}</span></span><span class="num" style="font-weight:600">${fmt(r.monto)}</span><button class="icon-btn" style="width:26px;height:26px;display:grid;color:var(--neg)" onclick="eliminarRecurrente(${r.id})"><i class="fa-regular fa-trash-can" style="font-size:.66rem"></i></button></div>`).join('');
 }
 function agregarRecurrente(){
   const cat=$('rec-cat').value;const desc=$('rec-desc').value.trim();const monto=parseFloat($('rec-monto').value)||0;const dia=Math.min(28,Math.max(1,parseInt($('rec-dia').value)||1));
@@ -1327,10 +1287,18 @@ function agregarRecurrente(){
   const ing=PLAN_INGRESOS.find(e=>e.cat===cat);
   const eg=PLAN_EGRESOS.find(e=>e.cat===cat);
   const tipo=ing?'ingreso':'egreso';const it=ing||eg;
-  recurrentes.push({id:Date.now(),tipo,categoria:cat,subcategoria:(it&&it.subs?it.subs[0]:''),medio:tipo==='ingreso'?'Transferencia':'Transferencia',descripcion:desc,monto,dia});
+  if (_editRecId) {
+    const idx = recurrentes.findIndex(x => x.id === _editRecId);
+    if (idx > -1) recurrentes[idx] = Object.assign({}, recurrentes[idx], {categoria:cat,tipo,subcategoria:(it&&it.subs?it.subs[0]:''),descripcion:desc,monto,dia});
+    _editRecId = null;
+    const btn = document.querySelector('[onclick="agregarRecurrente()"]');
+    if (btn) { btn.innerHTML = '<i class="fa-solid fa-plus"></i>'; btn.style.background=''; btn.style.color=''; }
+  } else {
+    recurrentes.push({id:Date.now(),tipo,categoria:cat,subcategoria:(it&&it.subs?it.subs[0]:''),medio:'Transferencia',descripcion:desc,monto,dia});
+  }
   $('rec-desc').value='';$('rec-monto').value='';guardar();renderRecurrentes();
 }
-function eliminarRecurrente(id){recurrentes=recurrentes.filter(r=>r.id!==id);guardar();renderRecurrentes();}
+function eliminarRecurrente(id){const r=recurrentes.find(x=>x.id===id);if(r){r.deleted=true;r.updatedAt=Date.now();}guardar();renderRecurrentes();}
 function generarRecurrentes(){
   if(periodo.mes==='all'){alert('Elige un mes específico arriba para generar los recurrentes.');return;}
   const ym=`${periodo.anio}-${String(periodo.mes).padStart(2,'0')}`;let creados=0;
@@ -1393,78 +1361,19 @@ function confirmarCartola(){
 
 /* ============================================================
    SYNC — Sincronización en tiempo real entre Mac, Windows y PWA
-   · GET  /api/datos  → descarga al abrir / al volver a la pestaña
-   · POST /api/datos  → sube tras cada guardar() con debounce 800ms
-   · Merge por id: gana el registro con updatedAt más reciente
-   · Cola offline: reintenta automático al recuperar red
-   · Solo activo con plan Pro; sin plan funciona 100% local
    ============================================================ */
 let _syncTimer=null,_syncPending=false,_syncBusy=false;
 let _syncTs=parseInt(localStorage.getItem('cfp_syncTs')||'0',10);
 let _syncIndicator=null;
-
 function _stamp(arr){const n=Date.now();return(arr||[]).map(r=>r.updatedAt?r:Object.assign({},r,{updatedAt:n}));}
 function _merge(local,remoto){const m=new Map((local||[]).map(r=>[r.id,r]));for(const r of(remoto||[])){const l=m.get(r.id);if(!l||(r.updatedAt||r.id)>=(l.updatedAt||l.id))m.set(r.id,r);}return Array.from(m.values());}
-
-function _aplicarRemoto(d){
-  if(!d)return;let c=false;
-  if(d.movimientos&&d.movimientos.length){const m=_merge(movimientos,d.movimientos);if(JSON.stringify(m)!==JSON.stringify(movimientos)){movimientos=m;c=true;}}
-  if(d.metas&&d.metas.length){const m=_merge(metas,d.metas);if(JSON.stringify(m)!==JSON.stringify(metas)){metas=m;c=true;}}
-  if(d.recurrentes&&d.recurrentes.length){const m=_merge(recurrentes,d.recurrentes);if(JSON.stringify(m)!==JSON.stringify(recurrentes)){recurrentes=m;c=true;}}
-  if(d.documentos&&d.documentos.length){const m=_merge(documentos,d.documentos);if(JSON.stringify(m)!==JSON.stringify(documentos)){documentos=m;c=true;}}
-  if(d.presupuesto&&Object.keys(d.presupuesto).length){presupuesto=Object.assign({},d.presupuesto,presupuesto);c=true;}
-  if(d.config&&d.config.licencia&&!CONFIG.licencia){CONFIG=Object.assign({},d.config,{apiBase:CONFIG.apiBase,dark:CONFIG.dark});cargarConfigInputs();c=true;}
-  if(d.syncTs){_syncTs=d.syncTs;localStorage.setItem('cfp_syncTs',_syncTs);}
-  if(c){
-    localStorage.setItem('cfp_movimientos',JSON.stringify(movimientos));
-    localStorage.setItem('cfp_presupuesto',JSON.stringify(presupuesto));
-    localStorage.setItem('cfp_metas',JSON.stringify(metas));
-    localStorage.setItem('cfp_recurrentes',JSON.stringify(recurrentes));
-    localStorage.setItem('cfp_documentos',JSON.stringify(documentos));
-    actualizar();
-  }
-}
-
-function _syncStatus(e){
-  if(!_syncIndicator)return;
-  const ic={ok:'fa-cloud-arrow-up',subiendo:'fa-rotate',error:'fa-cloud-slash',offline:'fa-wifi-slash'};
-  const co={ok:'var(--accent-2)',subiendo:'var(--gold)',error:'var(--neg)',offline:'var(--faint)'};
-  const lb={ok:'Sincronizado',subiendo:'Sincronizando…',error:'Error al sincronizar',offline:'Sin conexión'};
-  _syncIndicator.innerHTML=`<i class="fa-solid ${ic[e]}" style="font-size:.75rem;${e==='subiendo'?'animation:spin .7s linear infinite':''};margin-right:.3rem"></i>${lb[e]}`;
-  _syncIndicator.style.color=co[e];
-}
-
+function _aplicarRemoto(d){if(!d)return;let c=false;if(d.movimientos&&d.movimientos.length){const m=_merge(movimientos,d.movimientos);if(JSON.stringify(m)!==JSON.stringify(movimientos)){movimientos=m;c=true;}}if(d.metas&&d.metas.length){const m=_merge(metas,d.metas);if(JSON.stringify(m)!==JSON.stringify(metas)){metas=m;c=true;}}// Recurrentes: el servidor es la fuente de verdad — reemplazar completamente
+    if(d.recurrentes!==undefined){const srv=d.recurrentes||[];if(JSON.stringify(srv)!==JSON.stringify(recurrentes)){recurrentes=srv;c=true;}}if(d.documentos&&d.documentos.length){const m=_merge(documentos,d.documentos);if(JSON.stringify(m)!==JSON.stringify(documentos)){documentos=m;c=true;}}if(d.presupuesto&&Object.keys(d.presupuesto).length){presupuesto=Object.assign({},d.presupuesto,presupuesto);c=true;}if(d.config&&d.config.licencia&&!CONFIG.licencia){CONFIG=Object.assign({},d.config,{apiBase:CONFIG.apiBase,dark:CONFIG.dark});cargarConfigInputs();c=true;}if(d.syncTs){_syncTs=d.syncTs;localStorage.setItem('cfp_syncTs',_syncTs);}if(c){localStorage.setItem('cfp_movimientos',JSON.stringify(movimientos));localStorage.setItem('cfp_presupuesto',JSON.stringify(presupuesto));localStorage.setItem('cfp_metas',JSON.stringify(metas));localStorage.setItem('cfp_recurrentes',JSON.stringify(recurrentes));localStorage.setItem('cfp_documentos',JSON.stringify(documentos));actualizar();}}
+function _syncStatus(e){if(!_syncIndicator)return;const ic={ok:'fa-cloud-arrow-up',subiendo:'fa-rotate',error:'fa-cloud-slash',offline:'fa-wifi-slash'};const co={ok:'var(--accent-2)',subiendo:'var(--gold)',error:'var(--neg)',offline:'var(--faint)'};const lb={ok:'Sincronizado',subiendo:'Sincronizando…',error:'Error al sincronizar',offline:'Sin conexión'};_syncIndicator.innerHTML=`<i class="fa-solid ${ic[e]}" style="font-size:.75rem;${e==='subiendo'?'animation:spin .7s linear infinite':''};margin-right:.3rem"></i>${lb[e]}`;_syncIndicator.style.color=co[e];}
 function _payload(){return{licencia:CONFIG.licencia||'',device:DEVICE_ID,movimientos:_stamp(movimientos),presupuesto,metas:_stamp(metas),recurrentes:_stamp(recurrentes),documentos:_stamp(documentos),config:{licencia:CONFIG.licencia,email:CONFIG.email,monedaTxt:CONFIG.monedaTxt,monedaSimbolo:CONFIG.monedaSimbolo,sueldoRef:CONFIG.sueldoRef,metaAhorro:CONFIG.metaAhorro,saldoInicial:CONFIG.saldoInicial,fondoMeses:CONFIG.fondoMeses}};}
-
-async function _syncSubir(){
-  if(_syncBusy){_syncPending=true;return;}
-  if(!PLAN.activa)return;
-  if(!navigator.onLine){_syncStatus('offline');return;}
-  const url=apiURL('/api/datos');if(!url)return;
-  _syncBusy=true;_syncStatus('subiendo');
-  try{
-    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_payload())});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok||!d.ok)throw new Error(d.error||'HTTP '+r.status);
-    _aplicarRemoto(d);_syncStatus('ok');_syncPending=false;
-  }catch(e){console.warn('[SYNC] subir:',e.message);_syncStatus('error');_syncPending=true;}
-  finally{_syncBusy=false;if(_syncPending)syncEnqueue();}
-}
-
+async function _syncSubir(){if(_syncBusy){_syncPending=true;return;}if(!PLAN.activa)return;if(!navigator.onLine){_syncStatus('offline');return;}const url=apiURL('/api/datos');if(!url)return;_syncBusy=true;_syncStatus('subiendo');try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_payload())});const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw new Error(d.error||'HTTP '+r.status);_aplicarRemoto(d);_syncStatus('ok');_syncPending=false;}catch(e){console.warn('[SYNC] subir:',e.message);_syncStatus('error');_syncPending=true;}finally{_syncBusy=false;if(_syncPending)syncEnqueue();}}
 function syncEnqueue(){_syncPending=true;clearTimeout(_syncTimer);_syncTimer=setTimeout(_syncSubir,800);}
-
-async function syncDescargar(){
-  if(!PLAN.activa)return;
-  const url=apiURL('/api/datos');if(!url)return;
-  _syncStatus('subiendo');
-  try{
-    const r=await fetch(`${url}?licencia=${encodeURIComponent(CONFIG.licencia||'')}&device=${encodeURIComponent(DEVICE_ID)}`);
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok||!d.ok)throw new Error(d.error||'HTTP '+r.status);
-    _aplicarRemoto(d);_syncStatus('ok');
-  }catch(e){console.warn('[SYNC] bajar:',e.message);_syncStatus(navigator.onLine?'error':'offline');}
-}
-
+async function syncDescargar(){if(!PLAN.activa)return;const url=apiURL('/api/datos');if(!url)return;_syncStatus('subiendo');try{const r=await fetch(`${url}?licencia=${encodeURIComponent(CONFIG.licencia||'')}&device=${encodeURIComponent(DEVICE_ID)}`);const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw new Error(d.error||'HTTP '+r.status);_aplicarRemoto(d);_syncStatus('ok');}catch(e){console.warn('[SYNC] bajar:',e.message);_syncStatus(navigator.onLine?'error':'offline');}}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&PLAN.activa)syncDescargar();});
 window.addEventListener('online',()=>{if(PLAN.activa){if(_syncPending)syncEnqueue();else syncDescargar();}});
 window.addEventListener('offline',()=>_syncStatus('offline'));
@@ -1481,52 +1390,6 @@ window.addEventListener('DOMContentLoaded',()=>{
   pintarPlan();revisarPlan(true);revisarTrial();
   if(PLAN.activa)syncDescargar();
 });
-</script>
-
-<script>
-/* ── PWA: Service Worker ── */
-/* ── Sidebar móvil ── */
-function toggleSidebar(){
-  var sb=document.getElementById('sidebar');
-  var ov=document.getElementById('sidebar-overlay');
-  if(!sb||!ov)return;
-  var abierto=sb.classList.toggle('open');
-  ov.style.display=abierto?'block':'none';
-}
-function checkMobile(){
-  var bar=document.getElementById('mob-topbar');
-  if(bar) bar.style.display=window.innerWidth<=768?'flex':'none';
-  var sb=document.getElementById('sidebar');
-  if(sb&&window.innerWidth>768){sb.classList.remove('open');document.getElementById('sidebar-overlay').style.display='none';}
-}
-window.addEventListener('resize',checkMobile);
-document.addEventListener('DOMContentLoaded',checkMobile);
-
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('./sw.js')
-      .then(r=>console.log('[CFS] SW:',r.scope))
-      .catch(e=>console.warn('[CFS] SW error:',e));
-  });
-}
-/* ── PWA: prompt de instalación ── */
-let _deferredPrompt=null;
-window.addEventListener('beforeinstallprompt',e=>{
-  e.preventDefault();_deferredPrompt=e;
-  const b=document.getElementById('btn-instalar-pwa');
-  if(b)b.style.display='';
-});
-window.addEventListener('appinstalled',()=>{
-  _deferredPrompt=null;
-  const b=document.getElementById('btn-instalar-pwa');
-  if(b)b.style.display='none';
-});
-window.instalarPWA=async()=>{
-  if(!_deferredPrompt)return;
-  _deferredPrompt.prompt();
-  await _deferredPrompt.userChoice;
-  _deferredPrompt=null;
-};
 </script>
 </body>
 </html>

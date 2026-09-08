@@ -681,9 +681,9 @@ window.onerror=function(m,s,l){console.error('[CFS]',m,s,l);return false;};
       <!-- Monto destacado -->
       <div style="position:relative">
         <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:1.1rem;font-weight:700;color:var(--ink2)" id="f-simbolo">$</span>
-        <input class="field num" type="number" id="f-monto" placeholder="0" min="1" step="1"
+        <input class="field num" type="text" id="f-monto" placeholder="0"
           style="font-size:1.5rem;font-weight:700;padding-left:36px;height:58px"
-          inputmode="numeric">
+          inputmode="numeric" autocomplete="off" pattern="[0-9]*">
       </div>
 
       <!-- Fecha -->
@@ -956,7 +956,7 @@ function actualizar(animar) {
 
   render503020(d); renderFondo(); renderIndicadores(d); renderDona(d);
   renderTabla(); renderPresupuesto(d); renderMetas();
-  $('alerta').classList.toggle('hidden', !(d.egresos > d.baseIngreso * CONFIG.alertaPct && d.baseIngreso > 0));
+  const _al=$('alerta')||$('plan-alerta'); if(_al)_al.classList.toggle('hidden', !(d.egresos > d.baseIngreso * CONFIG.alertaPct && d.baseIngreso > 0));
   guardar();
 }
 
@@ -1040,7 +1040,7 @@ function renderPresupuesto(d) {
     return `<div class="card pad" style="margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:6px">
         <span style="font-weight:600">${e.cat}</span>
-        <span class="num" style="color:${ex?'var(--neg)':'var(--g2)';font-weight:700}">${ex?'+':''}${fmt(varz)}</span>
+        <span class="num" style="font-weight:700;color:${ex?'var(--neg)':'var(--g2)'}">${ex?'+':''}${fmt(varz)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--ink2);margin-bottom:6px">
         <span>${fmt(real)} gastado</span><span>${fmt(ppto)} presupuestado</span>
@@ -1073,16 +1073,8 @@ function renderTabla() {
         <div class="mov-cat">${escapeHtml(m.categoria || '—')}</div>
         <div class="mov-sub">${escapeHtml(m.descripcion || m.subcategoria || '—')} · ${m.fecha}</div>
       </div>
-      <div>
-        <div class="mov-monto" style="color:${ing?'var(--g2)':'var(--neg)'}">${ing?'+':'−'}${fmt(m.monto)}</div>
-        <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:4px">
-          <button onclick="editar(${m.id})" style="width:30px;height:30px;border-radius:8px;background:var(--bg2);border:1px solid var(--line);color:var(--ink2);display:grid;place-items:center;font-size:.72rem">
-            <i class="fa-solid fa-pen"></i>
-          </button>
-          <button onclick="eliminar(${m.id})" style="width:30px;height:30px;border-radius:8px;background:rgba(240,96,112,.1);border:1px solid rgba(240,96,112,.2);color:var(--neg);display:grid;place-items:center;font-size:.72rem">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-        </div>
+      <div class="mov-monto" style="color:${ing?'var(--g2)':'var(--neg)'}">
+        ${ing?'+':'−'}${fmt(m.monto)}
       </div>
     </div>`;
   }).join('');
@@ -1140,6 +1132,13 @@ function resetForm() {
   $('drawer-title').textContent = 'Nuevo movimiento';
   $('form-btn').textContent = 'Registrar';
   $('f-simbolo').textContent = CONFIG.monedaSimbolo;
+  // Solo números en el campo monto
+  $('f-monto').oninput = function() {
+    let v = this.value.replace(/[^0-9]/g, '');
+    // Formatear con puntos de miles
+    if (v) this.value = parseInt(v, 10).toLocaleString('es-CL');
+    else this.value = '';
+  };
 }
 
 function calcIVA(montoTotal) { const neto = Math.round(montoTotal / (1 + IVA_TASA)); return { neto, iva:montoTotal - neto }; }
@@ -1148,7 +1147,7 @@ function submitMov(e) {
   e.preventDefault();
   const id = $('f-id').value;
   const iva = esNegocio() && $('f-iva') && $('f-iva').checked;
-  const monto = Math.abs(parseFloat($('f-monto').value) || 0);
+  const monto = Math.abs(parseInt(String($('f-monto').value).replace(/\./g,'').replace(/[^0-9]/g,''), 10) || 0);
   const campos = { tipo:tipoActual, fecha:$('f-fecha').value, categoria:$('f-cat').value, subcategoria:$('f-sub').value, medio:$('f-medio').value, descripcion:$('f-desc').value.trim(), monto, iva:!!iva, ivaMonto:iva?calcIVA(monto).iva:0 };
   if (!campos.fecha) { toast('Indica una fecha'); return; }
   if (campos.monto <= 0) { toast('Monto debe ser mayor a 0'); return; }
@@ -1474,10 +1473,11 @@ async function desvincularEquipos() {
 function renderRecurrentes() {
   const cont = $('rec-list'); if (!cont) return;
   if (!recurrentes.length) { cont.innerHTML = '<div class="cap" style="padding:8px 0">Sin recurrentes</div>'; return; }
-  cont.innerHTML = recurrentes.map(r =>
+  cont.innerHTML = recurrentes.filter(r=>!r.deleted).map(r =>
     `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line2);font-size:.85rem">
       <div style="flex:1"><strong>${escapeHtml(r.descripcion)}</strong><br><span class="cap">${escapeHtml(r.categoria)} · día ${r.dia}</span></div>
       <span class="num" style="font-weight:600">${fmt(r.monto)}</span>
+      <button onclick="editarRecurrente(${r.id})" style="color:var(--ink2);padding:4px;font-size:.85rem"><i class="fa-solid fa-pen"></i></button>
       <button onclick="eliminarRecurrente(${r.id})" style="color:var(--neg);padding:4px;font-size:.85rem"><i class="fa-solid fa-trash"></i></button>
     </div>`
   ).join('');
@@ -1486,10 +1486,31 @@ function agregarRecurrente() {
   const cat = $('rec-cat').value; const desc = $('rec-desc').value.trim(); const monto = parseFloat($('rec-monto').value) || 0; const dia = Math.min(28, Math.max(1, parseInt($('rec-dia').value) || 1));
   if (!desc || monto <= 0) { toast('Indica descripción y monto'); return; }
   const ing = PLAN_INGRESOS.find(e => e.cat === cat); const tipo = ing ? 'ingreso' : 'egreso'; const it = ing || PLAN_EGRESOS.find(e => e.cat === cat);
-  recurrentes.push({ id:Date.now(), tipo, categoria:cat, subcategoria:(it&&it.subs?it.subs[0]:''), medio:'Transferencia', descripcion:desc, monto, dia });
-  $('rec-desc').value = ''; $('rec-monto').value = ''; guardar(); renderRecurrentes(); toast('Recurrente agregado');
+  if (_editRecId) {
+    const idx = recurrentes.findIndex(x => x.id === _editRecId);
+    if (idx > -1) recurrentes[idx] = Object.assign({}, recurrentes[idx], {categoria:cat,tipo,subcategoria:(it&&it.subs?it.subs[0]:''),descripcion:desc,monto,dia});
+    _editRecId = null;
+    toast('Recurrente actualizado');
+  } else {
+    recurrentes.push({ id:Date.now(), tipo, categoria:cat, subcategoria:(it&&it.subs?it.subs[0]:''), medio:'Transferencia', descripcion:desc, monto, dia });
+    toast('Recurrente agregado');
+  }
+  $('rec-desc').value = ''; $('rec-monto').value = ''; guardar(); renderRecurrentes();
 }
-function eliminarRecurrente(id) { recurrentes = recurrentes.filter(r => r.id !== id); guardar(); renderRecurrentes(); }
+function eliminarRecurrente(id){const r=recurrentes.find(x=>x.id===id);if(r){r.deleted=true;r.updatedAt=Date.now();}guardar();renderRecurrentes();}
+
+let _editRecId = null;
+function editarRecurrente(id) {
+  const r = recurrentes.find(x => x.id === id); if (!r) return;
+  _editRecId = id;
+  $('rec-cat').value   = r.categoria;
+  $('rec-desc').value  = r.descripcion;
+  $('rec-monto').value = r.monto;
+  $('rec-dia').value   = r.dia;
+  // Scroll al formulario
+  $('rec-desc').scrollIntoView({ behavior:'smooth', block:'center' });
+  $('rec-desc').focus();
+}
 function generarRecurrentes() {
   if (periodo.mes === 'all') { toast('Elige un mes específico'); return; }
   const ym = `${periodo.anio}-${String(periodo.mes).padStart(2,'0')}`; let creados = 0;
@@ -1600,6 +1621,13 @@ window.addEventListener('DOMContentLoaded', () => {
   $('f-medio').innerHTML = MEDIOS.map(m => `<option>${m}</option>`).join('');
   $('rec-cat').innerHTML = `<optgroup label="Gastos">${PLAN_EGRESOS.map(e=>`<option>${e.cat}</option>`).join('')}</optgroup><optgroup label="Ingresos">${PLAN_INGRESOS.map(e=>`<option>${e.cat}</option>`).join('')}</optgroup>`;
   $('f-simbolo').textContent = CONFIG.monedaSimbolo;
+  // Solo números en el campo monto
+  $('f-monto').oninput = function() {
+    let v = this.value.replace(/[^0-9]/g, '');
+    // Formatear con puntos de miles
+    if (v) this.value = parseInt(v, 10).toLocaleString('es-CL');
+    else this.value = '';
+  };
   cargarConfigInputs(); initPeriodo(); setTipo('egreso'); resetForm();
   actualizar(true);
   pintarPlan(); revisarPlan(true); revisarTrial();
