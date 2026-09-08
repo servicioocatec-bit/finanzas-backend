@@ -413,8 +413,11 @@ function mergeArray(servidor, cliente) {
   for (const r of (servidor || [])) mapa.set(r.id, r);
   for (const r of (cliente || [])) {
     const s = mapa.get(r.id);
+    // Tombstone: el registro más reciente gana (incluyendo deleted:true)
     if (!s || (r.updatedAt || r.id) >= (s.updatedAt || s.id)) mapa.set(r.id, r);
   }
+  // Mantener los deleted en el servidor para propagarlos a otros dispositivos
+  // pero devolver solo los vivos al cliente para no llenar la lista
   return Array.from(mapa.values());
 }
 
@@ -428,6 +431,7 @@ app.get('/api/datos', (req, res) => {
   if (auth.nuevo) guardarDB(DB);
   if (!auth.ok)   return res.status(402).json({ ok: false, error: 'Límite de equipos alcanzado.', motivo: 'limite' });
   const d = lic.datos || {};
+  // Devolver todos incluyendo deleted:true para que el merge funcione
   res.json({ ok: true, syncTs: lic.syncTs || 0,
     movimientos: d.movimientos || [], presupuesto: d.presupuesto || {},
     metas: d.metas || [], recurrentes: d.recurrentes || [],
