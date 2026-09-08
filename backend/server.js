@@ -410,10 +410,23 @@ app.post('/api/asesor', async (req, res) => {
 
 function mergeArray(servidor, cliente) {
   const mapa = new Map();
+  // Base: datos del servidor
   for (const r of (servidor || [])) mapa.set(r.id, r);
+  // Cliente: solo sobreescribe si su versión es más reciente
   for (const r of (cliente || [])) {
     const s = mapa.get(r.id);
-    if (!s || (r.updatedAt || r.id) >= (s.updatedAt || s.id)) mapa.set(r.id, r);
+    if (!s) {
+      // Registro nuevo del cliente
+      mapa.set(r.id, r);
+    } else if (s.deleted && !r.deleted) {
+      // Servidor dice deleted, cliente no sabe — el servidor gana (es más reciente)
+      // Solo dejar pasar si el cliente tiene updatedAt posterior al deleted del servidor
+      if ((r.updatedAt || 0) > (s.updatedAt || 0)) mapa.set(r.id, r);
+      // Si no, el deleted del servidor se mantiene
+    } else {
+      // Caso normal: gana el más reciente
+      if ((r.updatedAt || r.id) >= (s.updatedAt || s.id)) mapa.set(r.id, r);
+    }
   }
   return Array.from(mapa.values());
 }
@@ -428,6 +441,7 @@ app.get('/api/datos', (req, res) => {
   if (auth.nuevo) guardarDB(DB);
   if (!auth.ok)   return res.status(402).json({ ok: false, error: 'Límite de equipos alcanzado.', motivo: 'limite' });
   const d = lic.datos || {};
+  // Devolver todos incluyendo deleted:true para que el merge funcione
   res.json({ ok: true, syncTs: lic.syncTs || 0,
     movimientos: d.movimientos || [], presupuesto: d.presupuesto || {},
     metas: d.metas || [], recurrentes: d.recurrentes || [],
@@ -446,11 +460,24 @@ app.post('/api/datos', (req, res) => {
     if (!auth.ok)   return res.status(402).json({ ok: false, error: 'Límite de equipos alcanzado.', motivo: 'limite' });
     const cli = req.body || {};
     const srv = lic.datos || {};
+    // Recurrentes: servidor es fuente de verdad.
+    // Cliente solo puede AGREGAR ids nuevos, nunca sobreescribir los del servidor.
+    function mergeRecurrentes(servidor, cliente) {
+      const mapa = new Map((servidor || []).map(r => [r.id, r]));
+      for (const r of (cliente || [])) {
+        if (!mapa.has(r.id)) {
+          // Id nuevo que el servidor no conoce → agregar
+          mapa.set(r.id, r);
+        }
+        // Si el servidor ya tiene ese id (deleted o no), ignorar el cliente
+      }
+      return Array.from(mapa.values());
+    }
     const merged = {
       movimientos: mergeArray(srv.movimientos, cli.movimientos),
       presupuesto:  cli.presupuesto  || srv.presupuesto  || {},
       metas:        mergeArray(srv.metas,       cli.metas),
-      recurrentes:  mergeArray(srv.recurrentes, cli.recurrentes),
+      recurrentes:  srv.recurrentes || [],  // Recurrentes: servidor es la única fuente de verdad, cliente no puede modificarlos
       documentos:   mergeArray(srv.documentos,  cli.documentos),
       config:       cli.config       || srv.config       || null
     };
@@ -573,6 +600,28 @@ app.post('/api/admin/licencia/eliminar', (req, res) => {
   }
   guardarDB(DB);
   res.json({ ok: true, licencia: key, eliminada: true });
+});
+
+/* ── Limpiar recurrentes duplicados (admin) ── */
+app.post('/api/admin/recurrentes/limpiar', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const { licencia: key } = req.body || {};
+  const lic = DB.licencias[key];
+  if (!lic) return res.status(404).json({ ok: false, error: 'Licencia no encontrada.' });
+  const datos = lic.datos || {};
+  const recs = (datos.recurrentes || []).filter(r => !r.deleted);
+  // Deduplicar: clave = descripcion+categoria+dia
+  const vistos = new Map();
+  const limpios = [];
+  for (const r of recs) {
+    const k = `${(r.descripcion||'').toLowerCase().trim()}|${r.categoria}|${r.dia}`;
+    if (!vistos.has(k)) { vistos.set(k, true); limpios.push(r); }
+  }
+  datos.recurrentes = limpios;
+  lic.datos = datos;
+  lic.syncTs = Date.now();
+  guardarDB(DB);
+  res.json({ ok: true, antes: recs.length, despues: limpios.length, eliminados: recs.length - limpios.length });
 });
 
 const PORT = process.env.PORT || 3000;

@@ -477,7 +477,7 @@ app.post('/api/datos', (req, res) => {
       movimientos: mergeArray(srv.movimientos, cli.movimientos),
       presupuesto:  cli.presupuesto  || srv.presupuesto  || {},
       metas:        mergeArray(srv.metas,       cli.metas),
-      recurrentes:  mergeRecurrentes(srv.recurrentes, cli.recurrentes),
+      recurrentes:  srv.recurrentes || [],  // Recurrentes: servidor es la única fuente de verdad, cliente no puede modificarlos
       documentos:   mergeArray(srv.documentos,  cli.documentos),
       config:       cli.config       || srv.config       || null
     };

@@ -1591,7 +1591,7 @@ function setSyncStatus(e) {
   dot.className = e; // ok / err / busy / ''
   txt.textContent = e==='ok'?'Sincronizado':e==='err'?'Sin sync':e==='busy'?'Syncing…':'—';
 }
-function _payload() { return {licencia:CONFIG.licencia||'',device:DEVICE_ID,movimientos:_stamp(movimientos),presupuesto,metas:_stamp(metas),recurrentes:_stamp(recurrentes),documentos:_stamp(documentos),config:{licencia:CONFIG.licencia,email:CONFIG.email,monedaTxt:CONFIG.monedaTxt,monedaSimbolo:CONFIG.monedaSimbolo,sueldoRef:CONFIG.sueldoRef,metaAhorro:CONFIG.metaAhorro,saldoInicial:CONFIG.saldoInicial,fondoMeses:CONFIG.fondoMeses}}; }
+function _payload() { return {licencia:CONFIG.licencia||'',device:DEVICE_ID,movimientos:_stamp(movimientos),presupuesto,metas:_stamp(metas),documentos:_stamp(documentos),config:{licencia:CONFIG.licencia,email:CONFIG.email,monedaTxt:CONFIG.monedaTxt,monedaSimbolo:CONFIG.monedaSimbolo,sueldoRef:CONFIG.sueldoRef,metaAhorro:CONFIG.metaAhorro,saldoInicial:CONFIG.saldoInicial,fondoMeses:CONFIG.fondoMeses}}; }
 async function _syncSubir() {
   if (_syncBusy) { _syncPending = true; return; } if (!PLAN.activa) return;
   if (!navigator.onLine) { setSyncStatus('err'); return; }

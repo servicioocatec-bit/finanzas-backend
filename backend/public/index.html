@@ -1473,10 +1473,11 @@ async function desvincularEquipos() {
 function renderRecurrentes() {
   const cont = $('rec-list'); if (!cont) return;
   if (!recurrentes.length) { cont.innerHTML = '<div class="cap" style="padding:8px 0">Sin recurrentes</div>'; return; }
-  cont.innerHTML = recurrentes.map(r =>
+  cont.innerHTML = recurrentes.filter(r=>!r.deleted).map(r =>
     `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line2);font-size:.85rem">
       <div style="flex:1"><strong>${escapeHtml(r.descripcion)}</strong><br><span class="cap">${escapeHtml(r.categoria)} · día ${r.dia}</span></div>
       <span class="num" style="font-weight:600">${fmt(r.monto)}</span>
+      <button onclick="editarRecurrente(${r.id})" style="color:var(--ink2);padding:4px;font-size:.85rem"><i class="fa-solid fa-pen"></i></button>
       <button onclick="eliminarRecurrente(${r.id})" style="color:var(--neg);padding:4px;font-size:.85rem"><i class="fa-solid fa-trash"></i></button>
     </div>`
   ).join('');
@@ -1485,10 +1486,31 @@ function agregarRecurrente() {
   const cat = $('rec-cat').value; const desc = $('rec-desc').value.trim(); const monto = parseFloat($('rec-monto').value) || 0; const dia = Math.min(28, Math.max(1, parseInt($('rec-dia').value) || 1));
   if (!desc || monto <= 0) { toast('Indica descripción y monto'); return; }
   const ing = PLAN_INGRESOS.find(e => e.cat === cat); const tipo = ing ? 'ingreso' : 'egreso'; const it = ing || PLAN_EGRESOS.find(e => e.cat === cat);
-  recurrentes.push({ id:Date.now(), tipo, categoria:cat, subcategoria:(it&&it.subs?it.subs[0]:''), medio:'Transferencia', descripcion:desc, monto, dia });
-  $('rec-desc').value = ''; $('rec-monto').value = ''; guardar(); renderRecurrentes(); toast('Recurrente agregado');
+  if (_editRecId) {
+    const idx = recurrentes.findIndex(x => x.id === _editRecId);
+    if (idx > -1) recurrentes[idx] = Object.assign({}, recurrentes[idx], {categoria:cat,tipo,subcategoria:(it&&it.subs?it.subs[0]:''),descripcion:desc,monto,dia});
+    _editRecId = null;
+    toast('Recurrente actualizado');
+  } else {
+    recurrentes.push({ id:Date.now(), tipo, categoria:cat, subcategoria:(it&&it.subs?it.subs[0]:''), medio:'Transferencia', descripcion:desc, monto, dia });
+    toast('Recurrente agregado');
+  }
+  $('rec-desc').value = ''; $('rec-monto').value = ''; guardar(); renderRecurrentes();
 }
-function eliminarRecurrente(id) { recurrentes = recurrentes.filter(r => r.id !== id); guardar(); renderRecurrentes(); }
+function eliminarRecurrente(id){const r=recurrentes.find(x=>x.id===id);if(r){r.deleted=true;r.updatedAt=Date.now();}guardar();renderRecurrentes();}
+
+let _editRecId = null;
+function editarRecurrente(id) {
+  const r = recurrentes.find(x => x.id === id); if (!r) return;
+  _editRecId = id;
+  $('rec-cat').value   = r.categoria;
+  $('rec-desc').value  = r.descripcion;
+  $('rec-monto').value = r.monto;
+  $('rec-dia').value   = r.dia;
+  // Scroll al formulario
+  $('rec-desc').scrollIntoView({ behavior:'smooth', block:'center' });
+  $('rec-desc').focus();
+}
 function generarRecurrentes() {
   if (periodo.mes === 'all') { toast('Elige un mes específico'); return; }
   const ym = `${periodo.anio}-${String(periodo.mes).padStart(2,'0')}`; let creados = 0;
@@ -1569,7 +1591,7 @@ function setSyncStatus(e) {
   dot.className = e; // ok / err / busy / ''
   txt.textContent = e==='ok'?'Sincronizado':e==='err'?'Sin sync':e==='busy'?'Syncing…':'—';
 }
-function _payload() { return {licencia:CONFIG.licencia||'',device:DEVICE_ID,movimientos:_stamp(movimientos),presupuesto,metas:_stamp(metas),recurrentes:_stamp(recurrentes),documentos:_stamp(documentos),config:{licencia:CONFIG.licencia,email:CONFIG.email,monedaTxt:CONFIG.monedaTxt,monedaSimbolo:CONFIG.monedaSimbolo,sueldoRef:CONFIG.sueldoRef,metaAhorro:CONFIG.metaAhorro,saldoInicial:CONFIG.saldoInicial,fondoMeses:CONFIG.fondoMeses}}; }
+function _payload() { return {licencia:CONFIG.licencia||'',device:DEVICE_ID,movimientos:_stamp(movimientos),presupuesto,metas:_stamp(metas),documentos:_stamp(documentos),config:{licencia:CONFIG.licencia,email:CONFIG.email,monedaTxt:CONFIG.monedaTxt,monedaSimbolo:CONFIG.monedaSimbolo,sueldoRef:CONFIG.sueldoRef,metaAhorro:CONFIG.metaAhorro,saldoInicial:CONFIG.saldoInicial,fondoMeses:CONFIG.fondoMeses}}; }
 async function _syncSubir() {
   if (_syncBusy) { _syncPending = true; return; } if (!PLAN.activa) return;
   if (!navigator.onLine) { setSyncStatus('err'); return; }
