@@ -1,6 +1,6 @@
 /* Control Finanzas Studio — Service Worker v1 */
-const CACHE = 'cfs-v1';
-const SHELL = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
+const CACHE = 'cfs-v2';
+const SHELL = ['./', './index.html', './cfs-core.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 const CDN_HOSTS = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', e => {
