@@ -15,6 +15,7 @@
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jspdf.plugin.autotable.min.js"></script>
+<script src="cfs-core.js"></script>
 <style>
 :root{
   --bg:#070d18; --bg2:#0c1524; --card:#101e30; --card2:#152638;
@@ -620,6 +621,11 @@ window.onerror=function(m,s,l){console.error('[CFS]',m,s,l);return false;};
         </div>
       </div>
 
+      <!-- Reglas de categorización -->
+      <div class="card pad">
+        <div id="reglas-cat-box"></div>
+      </div>
+
       <!-- Peligroso -->
       <div class="card pad">
         <div class="sec">Zona de peligro</div>
@@ -683,7 +689,7 @@ window.onerror=function(m,s,l){console.error('[CFS]',m,s,l);return false;};
         <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:1.1rem;font-weight:700;color:var(--ink2)" id="f-simbolo">$</span>
         <input class="field num" type="text" id="f-monto" placeholder="0"
           style="font-size:1.5rem;font-weight:700;padding-left:36px;height:58px"
-          inputmode="numeric" autocomplete="off" pattern="[0-9]*">
+          inputmode="numeric" autocomplete="off">
       </div>
 
       <!-- Fecha -->
@@ -849,8 +855,9 @@ function load(key, fallback) {
 let CONFIG = Object.assign({
   monedaTxt:'CLP', monedaSimbolo:'$', sueldoRef:1200000,
   metaAhorro:240000, saldoInicial:0, fondoMeses:6, alertaPct:.85,
-  dark:false, iaEndpoint:'', apiBase:BACKEND_DEFAULT, licencia:'', email:''
+  dark:false, iaEndpoint:'', apiBase:BACKEND_DEFAULT, licencia:'', email:'', reglasCat:[]
 }, load('cfp_config', {}));
+if(!Array.isArray(CONFIG.reglasCat)) CONFIG.reglasCat=[];
 
 let PLAN = { activa:false, plan:'free', vence:null };
 let TRIAL = Object.assign({ activo:false, vence:null, dias:null }, load('cfp_trial', {}));
@@ -859,6 +866,7 @@ let presupuesto = load('cfp_presupuesto', {});
 let metas = load('cfp_metas', []);
 let recurrentes = load('cfp_recurrentes', []);
 let documentos = load('cfp_documentos', []);
+if (window.CFSCore) movimientos = CFSCore.purgarTombstones(movimientos, 120);
 
 function migrarDatos() {
   const v = load('cfp_schema', 1);
@@ -892,7 +900,7 @@ function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>]/g, c =
 
 /* ── PERÍODO ── */
 function delPeriodo(m) { const d = new Date(m.fecha + 'T00:00:00'); return d.getFullYear() === periodo.anio && (periodo.mes === 'all' || d.getMonth() + 1 === periodo.mes); }
-function movsPeriodo() { return movimientos.filter(delPeriodo); }
+function movsPeriodo() { return movimientos.filter(m => !m.deleted && delPeriodo(m)); }
 function divisorMeses() { return periodo.mes === 'all' ? 12 : 1; }
 
 /* ── CÁLCULOS ── */
@@ -925,12 +933,12 @@ function calcular() {
 }
 
 function ahorroAcumulado() {
-  const ing = movimientos.filter(m => m.tipo === 'ingreso').reduce((a, m) => a + m.monto, 0);
+  const ing = movimientos.filter(m => !m.deleted && m.tipo === 'ingreso').reduce((a, m) => a + m.monto, 0);
   let consumo = 0;
-  movimientos.forEach(m => { if (m.tipo === 'egreso') { const c = metaEgreso[m.categoria]; if (c && c.clase === 'ahorro') return; consumo += m.monto; } });
+  movimientos.forEach(m => { if (m.deleted) return; if (m.tipo === 'egreso') { const c = metaEgreso[m.categoria]; if (c && c.clase === 'ahorro') return; consumo += m.monto; } });
   const saldo = CONFIG.saldoInicial + (ing - consumo);
   const porMes = {};
-  movimientos.forEach(m => { if (m.tipo !== 'egreso') return; const c = metaEgreso[m.categoria]; if (!c || c.clase !== 'necesidad') return; const ym = (m.fecha || '').slice(0, 7); if (!ym) return; porMes[ym] = (porMes[ym] || 0) + m.monto; });
+  movimientos.forEach(m => { if (m.deleted || m.tipo !== 'egreso') return; const c = metaEgreso[m.categoria]; if (!c || c.clase !== 'necesidad') return; const ym = (m.fecha || '').slice(0, 7); if (!ym) return; porMes[ym] = (porMes[ym] || 0) + m.monto; });
   const meses6 = Object.keys(porMes).sort().slice(-6);
   const necProm = meses6.length ? meses6.reduce((a, k) => a + porMes[k], 0) / meses6.length : 0;
   return { saldo, meses: necProm > 0 ? saldo / necProm : 0, necProm };
@@ -1076,6 +1084,10 @@ function renderTabla() {
       <div class="mov-monto" style="color:${ing?'var(--g2)':'var(--neg)'}">
         ${ing?'+':'−'}${fmt(m.monto)}
       </div>
+      <div class="row" style="gap:2px;margin-left:6px;flex-shrink:0">
+        <button class="ic-btn tap" style="width:34px;height:34px;font-size:.78rem" onclick="editar(${m.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
+        <button class="ic-btn tap" style="width:34px;height:34px;font-size:.8rem;color:var(--neg)" onclick="eliminar(${m.id})" title="Eliminar"><i class="fa-regular fa-trash-can"></i></button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1093,7 +1105,7 @@ function showView(v) {
   if (v === 'inicio') { actualizar(true); }
   if (v === 'movs') { actualizar(); }
   if (v === 'metas') renderMetas();
-  if (v === 'ajustes') { cargarConfigInputs(); renderRecurrentes(); }
+  if (v === 'ajustes') { cargarConfigInputs(); renderRecurrentes(); if (window.CFSCore) CFSCore.renderReglasCat('reglas-cat-box', () => actualizar()); }
 }
 
 /* ── DRAWER MOVIMIENTO ── */
@@ -1148,7 +1160,7 @@ function submitMov(e) {
   const id = $('f-id').value;
   const iva = esNegocio() && $('f-iva') && $('f-iva').checked;
   const monto = Math.abs(parseInt(String($('f-monto').value).replace(/\./g,'').replace(/[^0-9]/g,''), 10) || 0);
-  const campos = { tipo:tipoActual, fecha:$('f-fecha').value, categoria:$('f-cat').value, subcategoria:$('f-sub').value, medio:$('f-medio').value, descripcion:$('f-desc').value.trim(), monto, iva:!!iva, ivaMonto:iva?calcIVA(monto).iva:0 };
+  const campos = { tipo:tipoActual, fecha:$('f-fecha').value, categoria:$('f-cat').value, subcategoria:$('f-sub').value, medio:$('f-medio').value, descripcion:$('f-desc').value.trim(), monto, iva:!!iva, ivaMonto:iva?calcIVA(monto).iva:0, updatedAt:Date.now() };
   if (!campos.fecha) { toast('Indica una fecha'); return; }
   if (campos.monto <= 0) { toast('Monto debe ser mayor a 0'); return; }
   if (id) { const i = movimientos.findIndex(m => m.id === Number(id)); if (i > -1) movimientos[i] = Object.assign({}, movimientos[i], campos); }
@@ -1169,7 +1181,8 @@ window.editar = id => {
 
 window.eliminar = id => {
   if (!confirm('¿Eliminar este movimiento?')) return;
-  movimientos = movimientos.filter(m => m.id !== id);
+  const m = movimientos.find(x => x.id === id);
+  if (m) { m.deleted = true; m.updatedAt = Date.now(); }
   actualizar(); toast('Movimiento eliminado');
 };
 
@@ -1248,7 +1261,7 @@ window.exportarPDF = () => {
   doc.save(`Finanzas_${periodo.anio}.pdf`);
 };
 window.respaldoJSON = () => {
-  const data = { schema:SCHEMA_VERSION, config:CONFIG, movimientos, presupuesto, metas, recurrentes, exportado:new Date().toISOString() };
+  const data = { schema:SCHEMA_VERSION, config:CONFIG, movimientos:movimientos.filter(m=>!m.deleted), presupuesto, metas:metas.filter(x=>!x.deleted), recurrentes:recurrentes.filter(r=>!r.deleted), exportado:new Date().toISOString() };
   const b = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(b);
   a.download = `respaldo_finanzas_${new Date().toISOString().slice(0,10)}.json`; a.click();
@@ -1272,7 +1285,7 @@ window.restaurarJSON = e => {
 };
 window.borrarTodo = () => {
   if (!confirm(`¿Eliminar todos los movimientos de ${periodo.mes==='all'?'el año '+periodo.anio:MESES[periodo.mes-1]+' '+periodo.anio}?`)) return;
-  movimientos = movimientos.filter(m => !delPeriodo(m)); actualizar(); toast('Movimientos eliminados');
+  movimientos.forEach(m => { if (!m.deleted && delPeriodo(m)) { m.deleted = true; m.updatedAt = Date.now(); } }); actualizar(); toast('Movimientos eliminados');
 };
 window.cargarEjemplo = () => {
   if (!confirm('¿Agregar movimientos de ejemplo?')) return;
@@ -1312,11 +1325,8 @@ async function llamarClaude(opts) {
     if (!r.ok || !d.ok) throw new Error(d && d.error || ('HTTP ' + r.status));
     return d.texto;
   }
-  const instr = modo === 'pregunta' ? `Pregunta: "${pregunta}". Responde conciso y práctico.` : 'Diagnóstico breve y 3 recomendaciones concretas.';
-  const resp = await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:800, messages:[{ role:'user', content:`${IA_PERSONA_MOB}\n\n${resumen}\n\n${instr}` }] }) });
-  if (!resp.ok) throw new Error('HTTP ' + resp.status);
-  const data = await resp.json();
-  return (data.content || []).map(b => b.type === 'text' ? b.text : '').join('\n').trim();
+  /* Sin backend no se llama directo a Anthropic (expondría la API key en el navegador). */
+  throw new Error('Configura la URL del backend en Ajustes para usar el Asesor IA.');
 }
 function mdToHtml(t) {
   let s = escapeHtml(t);
@@ -1552,13 +1562,24 @@ function confirmarCartola() {
   const cf = +$('map-fecha').value, cd = +$('map-desc').value, cm = +$('map-monto').value;
   const cat = $('map-cat').value, signo = $('map-signo').value, header = $('map-header').checked;
   const it = PLAN_EGRESOS.find(e => e.cat === cat);
+  const H = (cartolaTmp[0]||[]).map(x => String(x||'').toLowerCase());
+  const iC = H.findIndex(h => /cargo|giro|d[eé]bito|debe/.test(h)), iA = H.findIndex(h => /abono|dep[oó]sito|cr[eé]dito|haber/.test(h));
+  const usarCA = (iC > -1 && iA > -1);
   const filas = header ? cartolaTmp.slice(1) : cartolaTmp; let n = 0, dup = 0;
   const clave = m => `${m.fecha}|${Math.abs(m.monto)}|${(m.descripcion||'').slice(0,40).toLowerCase()}`;
-  const existentes = new Set(movimientos.map(clave));
+  const existentes = new Set(movimientos.filter(m => !m.deleted).map(clave));
   filas.forEach(row => {
-    const f = parseFecha(row[cf]); const monto = parseMonto(row[cm]); if (!f || monto === 0) return;
+    const f = parseFecha(row[cf]); if (!f) return;
+    let monto;
+    if (usarCA) { const c = Math.abs(parseMonto(row[iC])), a = Math.abs(parseMonto(row[iA])); monto = a > 0 ? a : -c; }
+    else monto = parseMonto(row[cm]);
+    if (monto === 0) return;
     const tipo = (signo === 'egreso') ? 'egreso' : (monto > 0 ? 'ingreso' : 'egreso');
-    const nuevo = { id:Date.now()+Math.floor(Math.random()*100000), tipo, fecha:f, categoria:tipo==='ingreso'?'Otros ingresos':cat, subcategoria:tipo==='ingreso'?'':(it?it.subs[0]:''), medio:'Transferencia', descripcion:(row[cd]||'Importado').slice(0,80), monto:Math.abs(monto) };
+    const desc = (row[cd]||'Importado').slice(0,80);
+    let categoria, subcategoria;
+    if (tipo === 'ingreso') { const ci = CFSCore.catIngreso(desc); categoria = ci.cat; subcategoria = ci.sub; }
+    else { const ce = CFSCore.catEgreso(desc, CONFIG.reglasCat); if (ce && PLAN_EGRESOS.some(e => e.cat === ce.cat)) { categoria = ce.cat; subcategoria = ce.sub; } else { categoria = cat; subcategoria = (it?it.subs[0]:''); } }
+    const nuevo = { id:Date.now()+Math.floor(Math.random()*100000), tipo, fecha:f, categoria, subcategoria, medio:tipo==='ingreso'?'Transferencia':'Débito', descripcion:desc, monto:Math.abs(monto), updatedAt:Date.now() };
     const k = clave(nuevo); if (existentes.has(k)) { dup++; return; } existentes.add(k); movimientos.push(nuevo); n++;
   });
   cerrarCartola(); actualizar(); showView('movs'); toast(n ? `${n} movimientos importados${dup?` · ${dup} duplicados omitidos`:''}` : 'Sin movimientos nuevos');
