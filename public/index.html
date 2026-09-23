@@ -1618,7 +1618,7 @@ async function _syncSubir() {
   if (!navigator.onLine) { setSyncStatus('err'); return; }
   const url = apiURL('/api/datos'); if (!url) return;
   _syncBusy = true; setSyncStatus('busy');
-  try { const r = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_payload())}); const d = await r.json().catch(()=>({})); if (!r.ok||!d.ok) throw new Error(d.error||'HTTP '+r.status); _aplicarRemoto(d); setSyncStatus('ok'); _syncPending = false; }
+  try { const r = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_payload())}); const d = await r.json().catch(()=>({})); if (r.status>=400 && r.status<500) { console.warn('[CFS] sync detenido HTTP '+r.status+':', d.error||''); setSyncStatus('err'); _syncPending = false; return; } if (!r.ok||!d.ok) throw new Error(d.error||'HTTP '+r.status); _aplicarRemoto(d); setSyncStatus('ok'); _syncPending = false; }
   catch(e) { setSyncStatus('err'); _syncPending = true; }
   finally { _syncBusy = false; if (_syncPending) syncEnqueue(); }
 }

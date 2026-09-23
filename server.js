@@ -32,7 +32,7 @@ const path = require('path');
 
 const app = express();
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '64kb' }));
+app.use(express.json({ limit: '5mb' })); // sube de 64kb: la sincronización envía TODO el dataset y una cartola grande lo supera
 app.use(express.urlencoded({ extended: false })); // Flow envía el webhook como form-urlencoded
 
 /* ---------- Config ---------- */

@@ -1453,6 +1453,7 @@ async function _syncSubir(){
   try{
     const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_payload())});
     const d=await r.json().catch(()=>({}));
+    if(r.status>=400&&r.status<500){console.warn('[SYNC] detenido HTTP '+r.status+':',d.error||'');_syncStatus('error');_syncPending=false;return;}
     if(!r.ok||!d.ok)throw new Error(d.error||'HTTP '+r.status);
     _aplicarRemoto(d);_syncStatus('ok');_syncPending=false;
   }catch(e){console.warn('[SYNC] subir:',e.message);_syncStatus('error');_syncPending=true;}
